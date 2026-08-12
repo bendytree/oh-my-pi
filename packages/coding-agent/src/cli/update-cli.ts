@@ -15,8 +15,9 @@ import chalk from "@oh-my-pi/pi-utils/chalk";
 import { $ } from "bun";
 import { theme } from "../modes/theme/theme";
 import { isTimeoutError, withTimeoutSignal } from "../utils/fetch-timeout";
+import { fetchLatestForkVersion, FORK_REPO } from "./fork";
 
-const REPO = "can1357/oh-my-pi";
+const REPO = FORK_REPO;
 const PACKAGE = "@oh-my-pi/pi-coding-agent";
 const HOMEBREW_FORMULA = "can1357/tap/omp";
 const MISE_TOOL = "github:can1357/oh-my-pi";
@@ -527,35 +528,25 @@ async function resolveUpdateTarget(options: { allowPackageManagers: boolean }): 
 }
 
 /**
- * Get the latest release info from the npm registry.
- * Uses npm instead of GitHub API to avoid unauthenticated rate limiting.
+ * Get the latest release info from the fork's GitHub Releases.
+ *
+ * Fork releases are binary-only (`dist: "binary"`), so `omp update` always
+ * takes the standalone-binary replacement path and never consults bun/npm.
  */
 async function getLatestRelease(): Promise<ReleaseInfo> {
-	let response: Response;
+	let version: string;
 	try {
-		response = await fetch(`${NPM_REGISTRY}${PACKAGE}/latest`, {
-			signal: withTimeoutSignal(RELEASE_METADATA_TIMEOUT_MS),
-		});
+		version = await fetchLatestForkVersion(RELEASE_METADATA_TIMEOUT_MS);
 	} catch (err) {
 		if (isTimeoutError(err)) {
 			throw new Error("Timed out fetching release info after 30s", { cause: err });
 		}
 		throw err;
 	}
-	if (!response.ok) {
-		throw new Error(`Failed to fetch release info: ${response.statusText}`);
-	}
-
-	const data: unknown = await response.json();
-	if (!isRecord(data) || typeof data.version !== "string") {
-		throw new Error("Malformed npm registry response: missing version");
-	}
-	const version = data.version;
-
 	return {
 		tag: `v${version}`,
 		version,
-		dist: resolveReleaseDist(data),
+		dist: "binary",
 	};
 }
 
