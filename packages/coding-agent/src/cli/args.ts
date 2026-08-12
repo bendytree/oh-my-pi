@@ -63,6 +63,10 @@ export interface Args {
 	fork?: string;
 	/** Collab link to join at startup (set by the `join` subcommand; no CLI flag). */
 	join?: string;
+	/** Start hosting a collab session at launch: `--collab [relayUrl]` (`true` = use collab.relayUrl setting). */
+	collab?: string | true;
+	/** With `--collab`: write the started session's connection info (JSON) to this file. */
+	collabAnnounce?: string;
 	models?: string[];
 	tools?: string[];
 	noTools?: boolean;

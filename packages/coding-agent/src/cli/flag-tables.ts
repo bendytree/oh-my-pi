@@ -241,6 +241,9 @@ export const STRING_SETTERS: Record<string, StringSetter> = {
 			});
 		}
 	},
+	"--collab-announce": (result, value) => {
+		result.collabAnnounce = value;
+	},
 };
 
 /**
@@ -254,6 +257,12 @@ export const OPTIONAL_FLAGS: Record<string, OptionalFlagConfig> = {
 	"--resume": { set: setResume, rejectEmpty: true },
 	"-r": { set: setResume, rejectEmpty: true },
 	"--session": { set: setResume, rejectEmpty: true },
+	"--collab": {
+		set: (result, value) => {
+			result.collab = value !== undefined ? value : true;
+		},
+		rejectEmpty: true,
+	},
 };
 
 /**

@@ -451,6 +451,8 @@ async function runInteractiveMode(
 	initialMessage?: string,
 	initialImages?: ImageContent[],
 	joinLink?: string,
+	collab?: string | true,
+	collabAnnounce?: string,
 ): Promise<void> {
 	const mode = new InteractiveMode(
 		session,
@@ -530,6 +532,41 @@ async function runInteractiveMode(
 	// `/join` so collab guards and error rendering stay in one place.
 	if (joinLink !== undefined) {
 		await executeBuiltinSlashCommand(`/join ${joinLink}`, { ctx: mode });
+	}
+
+	// `--collab [relayUrl]`: start hosting before the first prompt, through the
+	// same builtin path as a typed `/collab` so relay resolution, guards, and
+	// link rendering stay in one place. `--collab-announce <file>` then writes
+	// the connection info as JSON for wrappers (e.g. the agents CLI) that
+	// previously had to inject "/collab" keystrokes and scrape stdout for the
+	// OSC-8 link.
+	if (collab !== undefined) {
+		await executeBuiltinSlashCommand(collab === true ? "/collab" : `/collab ${collab}`, { ctx: mode });
+		if (collabAnnounce !== undefined) {
+			const host = mode.collabHost;
+			const announce = host
+				? {
+						ok: true,
+						pid: process.pid,
+						cwd: process.cwd(),
+						link: host.link,
+						webLink: host.webLink,
+						viewLink: host.viewLink,
+						webViewLink: host.webViewLink,
+						startedAt: Date.now(),
+					}
+				: { ok: false, pid: process.pid };
+			try {
+				// Atomic write: pollers must never read a torn file.
+				const tmpPath = `${collabAnnounce}.tmp`;
+				fsSync.writeFileSync(tmpPath, `${JSON.stringify(announce)}\n`);
+				fsSync.renameSync(tmpPath, collabAnnounce);
+			} catch (error: unknown) {
+				mode.showError(
+					`--collab-announce write failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
 	}
 
 	if (initialMessage !== undefined) {
@@ -1770,6 +1807,8 @@ export async function runRootCommand(
 				initialMessage,
 				initialImages,
 				parsedArgs.join,
+				parsedArgs.collab,
+				parsedArgs.collabAnnounce,
 			);
 		} else {
 			// Branch-only single-shot runner: keep print-mode code out of normal interactive startup.
