@@ -847,8 +847,8 @@ async function verifyBinaryAtPath(binaryPath: string, expectedVersion: string): 
 		const result = await $`${binaryPath} --version`.quiet().nothrow();
 		if (result.exitCode !== 0) return { ok: false, path: binaryPath };
 		const output = result.text().trim();
-		// Output format: "omp/X.Y.Z"
-		const match = output.match(/\/(\d+\.\d+\.\d+)/);
+		// Output format: "omp/X.Y.Z" (fork builds: "omp/X.Y.Z-fork.N")
+		const match = output.match(/\/(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/);
 		const actual = match?.[1];
 		return { ok: actual === expectedVersion, actual, path: binaryPath };
 	} catch {
