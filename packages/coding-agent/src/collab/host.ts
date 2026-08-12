@@ -11,8 +11,9 @@
 
 import { timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import { logger } from "@oh-my-pi/pi-utils";
+import { getAgentDir, logger } from "@oh-my-pi/pi-utils";
 import type {
 	BusChannel,
 	CollabUiRequest,
@@ -285,6 +286,54 @@ export class CollabHost {
 			this.#scheduleStateBroadcast();
 		};
 		this.#updateStatusSegment();
+		await this.#writeAnnounce();
+	}
+
+	/**
+	 * Well-known announce file: `<agentDir>/collab/<pid>.json`, written whenever
+	 * hosting starts (flag, collab.autoStart setting, or typed /collab) and
+	 * removed on teardown. Wrappers (e.g. the agents-collab extension) watch it
+	 * to learn the session's links without scraping terminal output. Dead-pid
+	 * leftovers from crashed processes are pruned on each write.
+	 */
+	#announceDir(): string {
+		return path.join(getAgentDir(), "collab");
+	}
+
+	#announcePath(): string {
+		return path.join(this.#announceDir(), `${process.pid}.json`);
+	}
+
+	async #writeAnnounce(): Promise<void> {
+		try {
+			const dir = this.#announceDir();
+			await fs.mkdir(dir, { recursive: true });
+			for (const name of await fs.readdir(dir)) {
+				const pid = Number(name.replace(/\.json$/, ""));
+				if (!Number.isInteger(pid) || pid === process.pid) continue;
+				try {
+					process.kill(pid, 0);
+				} catch {
+					await fs.unlink(path.join(dir, name)).catch(() => {});
+				}
+			}
+			const announce = {
+				ok: true,
+				pid: process.pid,
+				cwd: process.cwd(),
+				link: this.#link,
+				webLink: this.#webLink,
+				viewLink: this.#viewLink,
+				webViewLink: this.#webViewLink,
+				startedAt: Date.now(),
+			};
+			// Atomic write: watchers must never read a torn file.
+			const tmpPath = `${this.#announcePath()}.tmp`;
+			await fs.writeFile(tmpPath, `${JSON.stringify(announce)}\n`);
+			await fs.rename(tmpPath, this.#announcePath());
+		} catch (err) {
+			logger.warn("collab: announce file write failed", { error: String(err) });
+		}
 	}
 
 	/** Broadcast a goodbye, detach all taps, and close the socket. */
@@ -318,6 +367,7 @@ export class CollabHost {
 		this.#ctx.collabHost = undefined;
 		this.#ctx.statusLine.setCollabStatus(null);
 		this.#ctx.ui.requestRender();
+		await fs.unlink(this.#announcePath()).catch(() => {});
 	}
 
 	#broadcast(frame: CollabFrame): void {

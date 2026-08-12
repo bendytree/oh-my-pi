@@ -2019,6 +2019,17 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"collab.autoStart": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "interaction",
+			group: "Collab",
+			label: "Auto-start collab",
+			description: "Start hosting a collab session automatically at interactive launch (uses collab.relayUrl)",
+		},
+	},
+
 	"collab.webUrl": {
 		type: "string",
 		default: "",

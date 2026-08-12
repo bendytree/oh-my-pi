@@ -464,6 +464,14 @@ export class Editor implements Component, Focusable {
 	#autocompleteList?: SelectList;
 	#autocompleteState: "regular" | "force" | null = null;
 	#autocompletePrefix: string = "";
+	/**
+	 * Whether the user engaged the open popup (arrow/page navigation, or opened
+	 * it explicitly via Tab). Passive suggestions that merely appeared while
+	 * typing must not steal Enter: an unengaged popup is dropped and the
+	 * keypress submits the draft as typed (e.g. `/move ~/` + Enter used to
+	 * apply `~/.cache` instead of submitting).
+	 */
+	#autocompleteInteracted = false;
 	#autocompleteRequestId: number = 0;
 	#autocompleteMaxVisible: number = 5;
 	onAutocompleteUpdate?: () => void;
@@ -1239,6 +1247,7 @@ export class Editor implements Component, Focusable {
 					kb.matchesCanonical(canonical, "tui.select.pageUp") ||
 					kb.matchesCanonical(canonical, "tui.select.pageDown")
 				) {
+					this.#autocompleteInteracted = true;
 					this.#autocompleteList.handleInput(data);
 					this.onAutocompleteUpdate?.();
 					return;
@@ -1320,14 +1329,19 @@ export class Editor implements Component, Focusable {
 					}
 					// Don't return - fall through to submission logic
 				}
-				// Otherwise, apply the completion without submitting the surrounding draft.
+				// Otherwise, apply the completion without submitting the surrounding
+				// draft — but only when the user engaged the popup; a passive
+				// suggestion list falls away and Enter submits as typed.
 				else if (kb.matchesCanonical(canonical, "tui.input.submit") || data === "\n") {
 					const selected = this.#autocompleteList.getSelectedItem();
 					// Check for stale autocomplete state due to buffer edits since last refresh.
 					const currentLine = this.#state.lines[this.#state.cursorLine] ?? "";
 					const currentTextBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
-					if (!this.#autocompletePrefixMatchesCursorText(currentTextBeforeCursor, selected)) {
-						// Autocomplete is stale - cancel and fall through to normal submission
+					if (
+						!this.#autocompleteInteracted ||
+						!this.#autocompletePrefixMatchesCursorText(currentTextBeforeCursor, selected)
+					) {
+						// Unengaged or stale - cancel and fall through to normal submission
 						this.#cancelAutocomplete();
 					} else {
 						if (selected && this.#autocompleteProvider) {
@@ -3179,6 +3193,8 @@ export class Editor implements Component, Focusable {
 		} else {
 			await this.#forceFileAutocomplete();
 		}
+		// A Tab-opened popup is an explicit request: Enter may apply its selection.
+		if (this.#autocompleteState) this.#autocompleteInteracted = true;
 	}
 	async #handleSlashCommandCompletion(): Promise<void> {
 		await this.#tryTriggerAutocomplete();
@@ -3221,6 +3237,7 @@ export class Editor implements Component, Focusable {
 		this.#autocompleteState = null;
 		this.#autocompleteList = undefined;
 		this.#autocompletePrefix = "";
+		this.#autocompleteInteracted = false;
 		if (notifyCancel && wasAutocompleting) {
 			this.onAutocompleteCancel?.();
 		}
@@ -3252,6 +3269,10 @@ export class Editor implements Component, Focusable {
 			this.#autocompletePrefix = suggestions.prefix;
 			// Always create new SelectList to ensure update
 			this.#autocompleteList = this.#createAutocompleteList(suggestions.prefix, suggestions.items);
+			// The refresh reset the selection; typing after navigating voids the
+			// engagement, so Enter goes back to submitting until the user
+			// re-navigates (force mode keeps its explicit-Tab engagement).
+			this.#autocompleteInteracted = false;
 			this.onAutocompleteUpdate?.();
 		} else {
 			this.#cancelAutocomplete();

@@ -534,14 +534,15 @@ async function runInteractiveMode(
 		await executeBuiltinSlashCommand(`/join ${joinLink}`, { ctx: mode });
 	}
 
-	// `--collab [relayUrl]`: start hosting before the first prompt, through the
-	// same builtin path as a typed `/collab` so relay resolution, guards, and
-	// link rendering stay in one place. `--collab-announce <file>` then writes
-	// the connection info as JSON for wrappers (e.g. the agents CLI) that
-	// previously had to inject "/collab" keystrokes and scrape stdout for the
-	// OSC-8 link.
-	if (collab !== undefined) {
-		await executeBuiltinSlashCommand(collab === true ? "/collab" : `/collab ${collab}`, { ctx: mode });
+	// `--collab [relayUrl]` (or the collab.autoStart setting): start hosting
+	// before the first prompt, through the same builtin path as a typed
+	// `/collab` so relay resolution, guards, and link rendering stay in one
+	// place. `--collab-announce <file>` then writes the connection info as JSON
+	// for wrappers (e.g. the agents CLI) that previously had to inject
+	// "/collab" keystrokes and scrape stdout for the OSC-8 link.
+	const collabStart = collab ?? (settings.get("collab.autoStart") ? true : undefined);
+	if (collabStart !== undefined) {
+		await executeBuiltinSlashCommand(collabStart === true ? "/collab" : `/collab ${collabStart}`, { ctx: mode });
 		if (collabAnnounce !== undefined) {
 			const host = mode.collabHost;
 			const announce = host
