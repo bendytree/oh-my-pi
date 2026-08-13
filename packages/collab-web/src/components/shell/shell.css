@@ -321,6 +321,9 @@
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	resize: none;
+	/* iOS keys the virtual-keyboard appearance off the focused element's
+	 * color-scheme — pin it dark regardless of page theme. */
+	color-scheme: dark;
 }
 
 .sh-composer-input::placeholder {
@@ -331,13 +334,10 @@
 	opacity: 0.55;
 }
 
+/* No focus ring on the composer — the caret is the focus indicator. */
 .sh-composer-input:focus-visible {
 	outline: 2px solid transparent;
 	outline-offset: 0;
-}
-
-.sh-composer-input:focus {
-	border-color: var(--ring);
 }
 
 .sh-composer-actions {

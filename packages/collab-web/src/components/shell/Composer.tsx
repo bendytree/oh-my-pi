@@ -1,5 +1,5 @@
 import { SendHorizontal, Square } from "lucide-react";
-import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { GuestClient, GuestSnapshot } from "../../lib/client";
 
@@ -22,37 +22,21 @@ function autosize(el: HTMLTextAreaElement | null): void {
 }
 
 /**
- * Decides whether an Enter keydown should commit the composer. Returns `false` while an IME
- * composition is active so the keystroke confirms the composition instead of submitting.
- * `nativeEvent.isComposing` covers most browsers; `composing` bridges WebKit, which fires the
- * confirming Enter keydown *after* `compositionend`.
+ * Enter never submits — it inserts a newline like any textarea; the send button
+ * is the only commit path. Keeps mobile keyboards predictable and multiline
+ * prompts painless.
+ *
+ * The attribute soup keeps browsers from rewriting the draft: no autocorrect,
+ * autocapitalize, spellcheck, or Safari 18 "writing suggestions" (lowercase
+ * attr — React passes unknown lowercase attributes through).
  */
-export function shouldSubmitOnEnter(e: KeyboardEvent<HTMLTextAreaElement>, composing: boolean): boolean {
-	if (e.key !== "Enter" || e.shiftKey) return false;
-	return !(e.nativeEvent.isComposing || composing);
-}
-
-/**
- * Tracks IME composition state via a ref the keydown handler reads synchronously. The
- * `compositionend` reset is deferred a tick because WebKit dispatches the confirming Enter
- * keydown after `compositionend`, when `nativeEvent.isComposing` is already `false`.
- */
-function useCompositionGuard(): {
-	composingRef: RefObject<boolean>;
-	onCompositionStart(): void;
-	onCompositionEnd(): void;
-} {
-	const composingRef = useRef(false);
-	const onCompositionStart = useCallback((): void => {
-		composingRef.current = true;
-	}, []);
-	const onCompositionEnd = useCallback((): void => {
-		setTimeout(() => {
-			composingRef.current = false;
-		}, 0);
-	}, []);
-	return { composingRef, onCompositionStart, onCompositionEnd };
-}
+const VERBATIM_INPUT = {
+	autoCapitalize: "off",
+	autoCorrect: "off",
+	autoComplete: "off",
+	spellCheck: false,
+	...({ writingsuggestions: "false" } as Record<string, string>),
+} as const;
 
 interface AskEditorProps {
 	prefill: string | undefined;
@@ -67,18 +51,10 @@ interface AskEditorProps {
 function AskEditor({ prefill, onSubmit }: AskEditorProps): ReactNode {
 	const [draft, setDraft] = useState(prefill ?? "");
 	const taRef = useRef<HTMLTextAreaElement | null>(null);
-	const { composingRef, onCompositionStart, onCompositionEnd } = useCompositionGuard();
 
 	useLayoutEffect(() => {
 		autosize(taRef.current);
 	}, [draft]);
-
-	const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-		if (shouldSubmitOnEnter(e, composingRef.current)) {
-			e.preventDefault();
-			onSubmit(draft);
-		}
-	};
 
 	return (
 		<div className="sh-composer-inner">
@@ -87,12 +63,9 @@ function AskEditor({ prefill, onSubmit }: AskEditorProps): ReactNode {
 				className="sh-composer-input"
 				value={draft}
 				onChange={e => setDraft(e.target.value)}
-				onKeyDown={onKeyDown}
-				onCompositionStart={onCompositionStart}
-				onCompositionEnd={onCompositionEnd}
 				placeholder="type your response…"
 				rows={1}
-				spellCheck={false}
+				{...VERBATIM_INPUT}
 			/>
 			<div className="sh-composer-actions">
 				<button
@@ -111,7 +84,6 @@ function AskEditor({ prefill, onSubmit }: AskEditorProps): ReactNode {
 export function Composer({ client, snapshot }: ComposerProps): ReactNode {
 	const [text, setText] = useState("");
 	const taRef = useRef<HTMLTextAreaElement | null>(null);
-	const { composingRef, onCompositionStart, onCompositionEnd } = useCompositionGuard();
 
 	const live = snapshot.phase === "live";
 	const readOnly = snapshot.readOnly;
@@ -131,13 +103,6 @@ export function Composer({ client, snapshot }: ComposerProps): ReactNode {
 		client.sendPrompt(trimmed);
 		setText("");
 	}, [client, live, readOnly, text]);
-
-	const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-		if (shouldSubmitOnEnter(e, composingRef.current)) {
-			e.preventDefault();
-			send();
-		}
-	};
 
 	if (uiRequest && canPrompt) {
 		return (
@@ -203,9 +168,6 @@ export function Composer({ client, snapshot }: ComposerProps): ReactNode {
 					className="sh-composer-input"
 					value={text}
 					onChange={e => setText(e.target.value)}
-					onKeyDown={onKeyDown}
-					onCompositionStart={onCompositionStart}
-					onCompositionEnd={onCompositionEnd}
 					placeholder={
 						readOnly
 							? "read-only session — watching only"
@@ -215,7 +177,7 @@ export function Composer({ client, snapshot }: ComposerProps): ReactNode {
 					}
 					disabled={!canPrompt}
 					rows={1}
-					spellCheck={false}
+					{...VERBATIM_INPUT}
 				/>
 				<div className="sh-composer-actions">
 					{busy && queued > 0 && (
@@ -234,13 +196,7 @@ export function Composer({ client, snapshot }: ComposerProps): ReactNode {
 							<Square size={11} /> <span className="sh-btn-label">Stop</span>
 						</button>
 					)}
-					<button
-						type="button"
-						className="sh-btn sh-btn-primary"
-						onClick={send}
-						disabled={!canSend}
-						title="send (Enter)"
-					>
+					<button type="button" className="sh-btn sh-btn-primary" onClick={send} disabled={!canSend} title="send">
 						<SendHorizontal size={12} /> <span className="sh-btn-label">Send</span>
 					</button>
 				</div>
