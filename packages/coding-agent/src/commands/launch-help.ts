@@ -93,8 +93,12 @@ export const launchHelp = {
 		skills: Flags.string({ description: "Comma-separated glob patterns to filter skills (e.g., git-*,docker)" }),
 		"no-rules": Flags.boolean({ description: "Disable rules discovery and loading" }),
 		export: Flags.string({ description: "Export session file to HTML and exit" }),
-		collab: Flags.string({ description: "Start hosting a collab session at launch (optional relay URL; default collab.relayUrl)" }),
-		"collab-announce": Flags.string({ description: "With --collab: write the session's connection info (JSON) to this file" }),
+		collab: Flags.string({
+			description: "Start hosting a collab session at launch (optional relay URL; default collab.relayUrl)",
+		}),
+		"collab-announce": Flags.string({
+			description: "With --collab: write the session's connection info (JSON) to this file",
+		}),
 		"no-title": Flags.boolean({ description: "Disable title auto-generation" }),
 		"print-thoughts": Flags.boolean({ description: "Include thinking blocks in print mode text output" }),
 		"max-time": Flags.string({ description: "Stop the session after this duration (e.g., 600, 10m, 1h)" }),
