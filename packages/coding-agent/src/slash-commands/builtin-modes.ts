@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { prompt } from "@oh-my-pi/pi-utils";
 import {
 	expandRoleAlias,
 	formatModelString,
@@ -6,8 +7,8 @@ import {
 	resolveCliModel,
 } from "../config/model-resolver";
 import type { SettingPath } from "../config/settings";
-import { describeLoopLimitRuntime } from "../modes/loop-limit";
 import type { InteractiveModeContext } from "../modes/types";
+import scheduleCommandTemplate from "../prompts/session/schedule-command.md" with { type: "text" };
 import type { AgentSession } from "../session/agent-session";
 import type { ComputerTool } from "../tools/computer";
 import { computerExposureMode } from "../tools/computer/exposure";
@@ -279,24 +280,14 @@ export const BUILTIN_MODE_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpec> = [
 		},
 	},
 	{
-		name: "loop",
+		name: "schedule",
 		description:
-			"Toggle loop mode. While enabled, the next prompt you send re-submits after every yield. Esc cancels the current iteration; /loop again to disable.",
-		inlineHint: "[count|duration] [prompt]",
+			"Schedule a recurring or one-shot prompt; each run spawns a fresh subagent and its result posts back here. No args lists active schedules.",
+		inlineHint: "[request]",
 		allowArgs: true,
-		getTuiAutocompleteDescription: runtime => {
-			if (!runtime.ctx.loopModeEnabled) return "Loop: off";
-			if (runtime.ctx.loopModePaused) return "Loop: paused";
-			if (runtime.ctx.loopLimit) return `Loop: on (${describeLoopLimitRuntime(runtime.ctx.loopLimit)})`;
-			if (runtime.ctx.loopPrompt) return "Loop: on (repeating prompt)";
-			return "Loop: on (waiting for next prompt)";
-		},
 		handleTui: async (command, runtime) => {
-			const prompt = await runtime.ctx.handleLoopCommand(command.args);
 			runtime.ctx.editor.setText("");
-			// Surface any inline prompt so the dispatcher returns it and the normal
-			// submit flow runs the first loop iteration (recording it as the loop prompt).
-			if (prompt) return { prompt };
+			return { prompt: prompt.render(scheduleCommandTemplate, { request: command.args?.trim() || undefined }) };
 		},
 	},
 	{

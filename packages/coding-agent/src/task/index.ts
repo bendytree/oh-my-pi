@@ -132,6 +132,9 @@ export function formatResultOutputFallback(result: Pick<SingleResult, "output" |
 	return result.requests > 0 ? `(no output) after ${result.requests} req` : "(no output)";
 }
 
+/** Cap for recently-used model selectors surfaced in the tool description. */
+const MAX_RECENT_MODEL_HINTS = 6;
+
 interface TaskDescriptionOptions {
 	agents: AgentDefinition[];
 	isolationEnabled: boolean;
@@ -142,6 +145,10 @@ interface TaskDescriptionOptions {
 	asyncEnabled: boolean;
 	ircEnabled: boolean;
 	parentSpawns: string;
+	/** Configured role aliases rendered as `@role` → selector hints. */
+	modelRoles: { alias: string; selector: string }[];
+	/** Most-recently-used `provider/id` selectors, curated for the `model` field. */
+	recentModels: string[];
 }
 
 /** Render the tool description from a cached agent list and current settings. */
@@ -177,6 +184,8 @@ function renderDescription(options: TaskDescriptionOptions): string {
 		asyncEnabled: options.asyncEnabled,
 		hasBlockingAgents: renderedAgents.some(agent => agent.blocking),
 		ircEnabled: options.ircEnabled,
+		modelRolesText: options.modelRoles.map(role => `\`${role.alias}\` → \`${role.selector}\``).join(", "),
+		recentModelsText: options.recentModels.map(selector => `\`${selector}\``).join(", "),
 	});
 }
 
@@ -277,6 +286,7 @@ function resolveSpawnItems(params: TaskParams): TaskItem[] {
 	const item: TaskItem = { name: params.name, agent: params.agent, task: params.task };
 	if ("outputSchema" in params) item.outputSchema = params.outputSchema;
 	if ("schemaMode" in params) item.schemaMode = params.schemaMode;
+	if ("model" in params) item.model = params.model;
 	if ("effort" in params) item.effort = params.effort;
 	if ("isolated" in params) item.isolated = params.isolated;
 	return [item];
@@ -298,6 +308,7 @@ function spawnParamsFor(params: TaskParams, item: TaskItem, defaultAgent: string
 	if (params.context !== undefined) spawn.context = params.context;
 	if ("outputSchema" in item) spawn.outputSchema = item.outputSchema;
 	if ("schemaMode" in item) spawn.schemaMode = item.schemaMode;
+	if ("model" in item) spawn.model = item.model;
 	if ("effort" in item) spawn.effort = item.effort;
 	if (item.isolated !== undefined) {
 		spawn.isolated = item.isolated;
@@ -601,6 +612,13 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 		const disabledAgents = this.session.settings.get("task.disabledAgents") as string[];
 		const planMode = this.session.getPlanModeState?.()?.enabled === true;
 		const isolationMode = this.session.settings.get("task.isolation.mode");
+		const modelRoles = Object.entries(this.session.settings.getModelRoles())
+			.filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+			.map(([role, selector]) => ({ alias: `@${role}`, selector }));
+		const roleSelectors = new Set(modelRoles.map(role => role.selector));
+		const recentModels = (this.session.settings.getStorage?.()?.getModelUsageOrder() ?? [])
+			.filter(selector => !roleSelectors.has(selector))
+			.slice(0, MAX_RECENT_MODEL_HINTS);
 		return renderDescription({
 			agents: discoverySnapshots.get(path.resolve(this.session.cwd)) ?? this.#discoveredAgents,
 			isolationEnabled: !planMode && isolationMode !== "none",
@@ -611,6 +629,8 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 			asyncEnabled: this.session.settings.get("async.enabled"),
 			ircEnabled: isIrcEnabled(this.session.settings, this.session.taskDepth ?? 0),
 			parentSpawns: this.session.getSessionSpawns() ?? "*",
+			modelRoles,
+			recentModels,
 		});
 	}
 	private constructor(
@@ -655,6 +675,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 			...(Object.hasOwn(params, "outputSchema") ? { outputSchema: params.outputSchema } : {}),
 			...(Object.hasOwn(params, "schemaMode") ? { schemaMode: params.schemaMode } : {}),
 			...(params.effort !== undefined ? { effort: params.effort } : {}),
+			...(typeof params.model === "string" && params.model.trim() ? { model: params.model } : {}),
 			...("isolated" in params ? { isolation: { requested: params.isolated } } : {}),
 			blockedAgent: this.#blockedAgent,
 			enableLsp: (this.session.enableLsp ?? true) && this.session.settings.get("task.enableLsp"),
@@ -1424,6 +1445,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 				...(Object.hasOwn(params, "outputSchema") ? { outputSchema: params.outputSchema } : {}),
 				...(Object.hasOwn(params, "schemaMode") ? { schemaMode: params.schemaMode } : {}),
 				...(params.effort !== undefined ? { effort: params.effort } : {}),
+				...(typeof params.model === "string" && params.model.trim() ? { model: params.model } : {}),
 				identity: { id: preAllocatedId, label: params.name },
 				index: spawnIndex,
 				parentToolCallId: toolCallId,

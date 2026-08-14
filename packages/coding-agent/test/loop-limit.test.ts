@@ -1,41 +1,10 @@
-import { describe, expect, test, vi } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
 	consumeLoopLimitIteration,
 	createLoopLimitRuntime,
 	isLoopDurationExpired,
 	parseLoopLimitArgs,
 } from "@oh-my-pi/pi-coding-agent/modes/loop-limit";
-import type { BuiltinSlashCommandRuntime } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
-import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
-
-describe("/loop slash command", () => {
-	test("forwards a bare limit argument verbatim", async () => {
-		const handleLoopCommand = vi.fn(async (_args?: string) => undefined);
-		const runtime = {
-			ctx: { handleLoopCommand, editor: { setText: vi.fn() } },
-		} as unknown as BuiltinSlashCommandRuntime;
-		const result = await executeBuiltinSlashCommand("/loop 10min", runtime);
-
-		expect(result).toBe(true);
-		expect(handleLoopCommand).toHaveBeenCalledWith("10min");
-	});
-
-	test("forwards the full residual and propagates the inline prompt for submission", async () => {
-		// The dispatcher must hand the entire `<limit> <prompt>` string to
-		// handleLoopCommand (the parser, not the dispatcher, splits limit vs prompt)
-		// and surface the returned inline prompt so input-controller submits it.
-		const handleLoopCommand = vi.fn(async (_args?: string) => "fix the failing tests");
-		const setText = vi.fn();
-		const runtime = {
-			ctx: { handleLoopCommand, editor: { setText } },
-		} as unknown as BuiltinSlashCommandRuntime;
-		const result = await executeBuiltinSlashCommand("/loop 10m fix the failing tests", runtime);
-
-		expect(handleLoopCommand).toHaveBeenCalledWith("10m fix the failing tests");
-		expect(result).toBe("fix the failing tests");
-		expect(setText).toHaveBeenCalledWith("");
-	});
-});
 
 describe("loop limit parsing", () => {
 	test("empty args produce neither a limit nor a prompt", () => {

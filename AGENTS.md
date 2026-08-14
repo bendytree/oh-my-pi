@@ -281,3 +281,15 @@ Location: `packages/*/CHANGELOG.md` (per package).
 2. Run `bun run release`.
 
 The script handles version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
+
+## Fork Deployment
+
+This is the `bendytree/oh-my-pi` fork. Two mechanisms replace installed omp binaries with the **latest bendytree/oh-my-pi GitHub release**:
+
+1. **The `agents` CLI auto-reinstalls on every launch.** `agents` (`~/.local/bin/agents`, separate compiled tool) runs `omp --version` before launching an agent; any version string without `-fork.` is treated as "not the fork" and silently replaced by curling `releases/latest/download/omp-<platform>` over `~/.local/bin/omp`. Locally built binaries report plain `x.y.z` (the `-fork.N` suffix is stamped by the release pipeline), so **a hand-installed local build is reverted by the very next `agents` launch on that machine** — Mac and homelab VMs alike.
+2. **`omp update` is manual but fork-pointed.** It (and the startup notice, `startup.checkUpdate`) resolves the latest fork release and replaces the binary in place. No silent auto-install here.
+
+Consequence: unreleased fork changes exist only in this tree. To deploy anything for real, commit and cut a fork release (`bun run release` → new fork tag); hand-copied binaries are a stopgap that dies at the next `agents` launch.
+
+- Build binaries locally: `bun scripts/ci-release-build-binaries.ts --targets darwin-arm64,linux-x64` → `packages/coding-agent/binaries/`. Cross-target builds need the prebuilt native addon in `packages/natives/native/` — fetch with `npm pack @oh-my-pi/pi-natives-<platform>@<version>` or copy from `~/.omp/natives/<version>/`.
+- Never overwrite a live macOS binary with in-place `cp` — macOS SIGKILLs processes whose signed image changed. Copy to a temp name and `mv` over (fresh inode), like `update-cli.ts` does.

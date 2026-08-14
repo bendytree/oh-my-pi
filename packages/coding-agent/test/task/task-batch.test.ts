@@ -107,6 +107,7 @@ describe("task.batch schema gating", () => {
 		expect(offProperties.tasks).toBeUndefined();
 		expect(offProperties.context).toBeUndefined();
 		expect(offProperties.task).toBeDefined();
+		expect(offProperties.model).toBeDefined();
 		expect(offProperties.name).toBeDefined();
 		expect(offProperties.outputSchema).toBeDefined();
 		expect(typeof offProperties.outputSchema).toBe("object");
@@ -125,6 +126,7 @@ describe("task.batch schema gating", () => {
 		expect(onProperties.schemaMode).toBeUndefined();
 		const itemProperties = getBatchItemProperties(on);
 		expect(itemProperties.task).toBeDefined();
+		expect(itemProperties.model).toBeDefined();
 		expect(itemProperties.name).toBeDefined();
 		expect(itemProperties.agent).toBeDefined();
 		expect(itemProperties.outputSchema).toBeDefined();
@@ -437,7 +439,7 @@ describe("task.batch spawning", () => {
 		const result = await tool.execute("tc-mixed-agents", {
 			context: "Shared routing context.",
 			tasks: [
-				{ name: "Scout", agent: "scout", task: "Investigate." },
+				{ name: "Scout", agent: "scout", task: "Investigate.", model: "openai/gpt-4o" },
 				{
 					name: "Review",
 					agent: "reviewer",
@@ -455,7 +457,7 @@ describe("task.batch spawning", () => {
 		const reviewerSpawn = byId.get("Review");
 		expect(scoutSpawn?.agent).toBe(scoutAgent);
 		expect(scoutSpawn?.agent.tools).toEqual(["read"]);
-		expect(scoutSpawn?.modelOverride).toEqual(["anthropic/claude-haiku-4-5:low"]);
+		expect(scoutSpawn?.modelOverride).toEqual(["openai/gpt-4o"]);
 		expect(scoutSpawn?.outputSchema).toBe(scoutSchema);
 		expect(scoutSpawn?.outputSchemaSource).toBe("agent");
 		expect(scoutSpawn?.outputSchemaOverridesAgent).toBe(false);

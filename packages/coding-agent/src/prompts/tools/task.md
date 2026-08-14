@@ -27,6 +27,7 @@ Agents marked BLOCKING run inline — results return in this call; non-blocking 
   - `task`: Complete, self-contained instructions. One-liners or missing acceptance criteria are PROHIBITED.
 {{#if effortEnabled}}  - `effort`: Scale w/ complexity of this task: `"lo"`|`"med"`|`"hi"`
 {{/if}}
+  - `model`: Force a specific model for this spawn; otherwise the agent type's default applies. See Model Selection.
   - `outputSchema`: Invocation-specific JSON Schema. Overrides the selected agent and parent-session schemas.
   - `schemaMode`: `"permissive"` (default) accepts a retry-exhausted invalid result with a warning; `"strict"` fails it.
 {{#if isolationEnabled}}
@@ -42,6 +43,7 @@ Agents marked BLOCKING run inline — results return in this call; non-blocking 
 - `task`: Complete, self-contained instructions. One-liners or missing acceptance criteria are PROHIBITED.
 {{#if effortEnabled}}- `effort`: Scale w/ complexity of this task: `"lo"`|`"med"`|`"hi"`
 {{/if}}
+- `model`: Force a specific model for this spawn; otherwise the agent type's default applies. See Model Selection.
 - `outputSchema`: Invocation-specific JSON Schema. Overrides the selected agent and parent-session schemas.
 - `schemaMode`: `"permissive"` (default) accepts a retry-exhausted invalid result with a warning; `"strict"` fails it.
 {{#if isolationEnabled}}
@@ -51,6 +53,15 @@ Agents marked BLOCKING run inline — results return in this call; non-blocking 
 - `isolated`: Run in a dedicated worktree; changes are retained as patch or branch artifacts without modifying the parent checkout.
 {{/if}}
 {{/if}}
+{{/if}}
+
+# Model Selection
+`model` accepts a fuzzy name (`opus`), an exact `provider/id`, or a role alias (`@smol` fast, `@slow` most capable); append `:low`/`:medium`/`:high` for thinking effort. Unresolvable selectors fall back to the parent session's model.
+{{#if modelRolesText}}
+Configured roles: {{modelRolesText}}.
+{{/if}}
+{{#if recentModelsText}}
+Known-good (recently used): {{recentModelsText}}.
 {{/if}}
 
 # Communication
