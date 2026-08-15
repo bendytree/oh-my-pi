@@ -6,6 +6,11 @@
 
 - Added an optional `model` field to `task` tool spawns (flat and batch items) that forces a specific model for that subagent, overriding settings and agent-definition defaults. Accepts fuzzy names (`opus`), exact `provider/id`, or `@role` aliases; the tool description now surfaces configured roles and recently used models as selector hints.
 - Added a session-local `schedule` tool and `/schedule` command: register recurring (`every 20m`) or one-shot (`at 21:00`) prompts; each fire spawns a fresh-context subagent and its result auto-delivers into the session as a background job. Schedules die with the session — no persistence, no re-arming.
+- Added bundled `titanium-contrast` theme (titanium with a blue user-message bubble).
+
+### Changed
+
+- The built-in `titanium` theme now uses a blue user-message bubble (`#1e3a5f`), matching `titanium-contrast`.
 
 ### Removed
 
