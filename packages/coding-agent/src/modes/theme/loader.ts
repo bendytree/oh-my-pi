@@ -131,6 +131,8 @@ export function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = 
 	const { mode, symbolPresetOverride, colorBlindMode } = options;
 	const colorMode = mode ?? detectColorMode();
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
+	// mdBold is optional; themes without it render bold with the surrounding text color.
+	resolvedColors.mdBold ??= "";
 
 	if (colorBlindMode) {
 		const added = resolvedColors.toolDiffAdded;

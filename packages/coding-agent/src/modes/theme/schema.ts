@@ -40,6 +40,7 @@ const themeColorsSchema = type({
 	mdQuoteBorder: "string | number",
 	mdHr: "string | number",
 	mdListBullet: "string | number",
+	"mdBold?": "string | number",
 	toolDiffAdded: "string | number",
 	toolDiffRemoved: "string | number",
 	toolDiffContext: "string | number",
@@ -145,6 +146,7 @@ export type ThemeColor =
 	| "mdQuoteBorder"
 	| "mdHr"
 	| "mdListBullet"
+	| "mdBold"
 	| "toolDiffAdded"
 	| "toolDiffRemoved"
 	| "toolDiffContext"
@@ -208,6 +210,7 @@ const THEME_COLOR_RECORD = {
 	mdQuoteBorder: true,
 	mdHr: true,
 	mdListBullet: true,
+	mdBold: true,
 	toolDiffAdded: true,
 	toolDiffRemoved: true,
 	toolDiffContext: true,

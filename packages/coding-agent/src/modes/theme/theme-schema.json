@@ -231,6 +231,10 @@
 					"$ref": "#/$defs/colorValue",
 					"description": "Markdown list bullets/numbers"
 				},
+				"mdBold": {
+					"$ref": "#/$defs/colorValue",
+					"description": "Markdown bold text (optional; falls back to the surrounding text color when omitted)"
+				},
 				"toolDiffAdded": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Added lines in tool diffs"
