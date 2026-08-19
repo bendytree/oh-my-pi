@@ -619,7 +619,19 @@ class DaemonBroker {
 				throw new Error(`Daemon ${spec.name} is already ${existing.snapshot.state}`);
 			}
 			if (existing && existing.pendingCompletions.length > 0) {
-				throw new Error(`Daemon ${spec.name} has unacknowledged completion notifications`);
+				// Only block the name while the owner can still ack: it holds a live
+				// completion-event connection. Otherwise the completions are
+				// unackable — subscription ids are minted per process
+				// (client.ts #completionSubscriptionId), so after the owning
+				// process dies (e.g. a host reboot killed a detached daemon and
+				// its session together) no future client can ever clear them and
+				// the name would jam forever. The notifications stay queued in
+				// #pendingCompletions for replay if the owner session resumes.
+				const owner = existing.snapshot.owner;
+				const registration = owner === undefined ? undefined : this.#ownerSockets.get(owner);
+				if (registration && !registration.socket.destroyed) {
+					throw new Error(`Daemon ${spec.name} has unacknowledged completion notifications`);
+				}
 			}
 			if (spec.ready?.log) {
 				try {
