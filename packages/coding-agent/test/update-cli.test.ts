@@ -247,6 +247,52 @@ describe("update-cli install target detection", () => {
 		expect(target).toEqual({ method: "binary", path: standalonePath, replacesSymlink: false });
 	});
 
+	it("resolves a foreign symlink to its real binary on a binary-only release instead of clobbering the launcher", async () => {
+		// Admin shared-install layout: a non-manager symlink in PATH points into
+		// a shared install dir. On a binary-only release the target must still be
+		// the resolved binary, not the launcher — otherwise the update writes
+		// beside a root-owned symlink (EACCES) or replaces it with a split-brain
+		// copy that shadows the shared install (#8732).
+		const dir = await makeTempDir();
+		const sharedBinDir = path.join(dir, "opt", "omp", "bin");
+		const standalonePath = path.join(sharedBinDir, "omp");
+		const launcherDir = path.join(dir, "usr", "local", "bin");
+		const launcherPath = path.join(launcherDir, "omp");
+		await fs.mkdir(sharedBinDir, { recursive: true });
+		await fs.mkdir(launcherDir, { recursive: true });
+		await Bun.write(standalonePath, "binary");
+		await fs.symlink(standalonePath, launcherPath);
+
+		const target = resolveUpdateTargetFromPath(launcherPath, undefined, {
+			allowPackageManagers: false,
+		});
+
+		expect(target).toEqual({ method: "binary", path: standalonePath, replacesSymlink: false });
+		expect(await fs.readlink(launcherPath)).toBe(standalonePath);
+	});
+
+	it("takes over a package-manager launcher in place on a binary-only release", async () => {
+		// A bun/npm-managed launcher symlinks into the manager's node_modules.
+		// A forced binary release cannot route through the manager, so the
+		// launcher is deliberately replaced in place, keeping the PATH entry live.
+		const dir = await makeTempDir();
+		const npmPrefix = path.join(dir, ".npm-global");
+		const npmBinDir = path.join(npmPrefix, "bin");
+		const managedBinary = path.join(npmPrefix, "lib", "node_modules", "@oh-my-pi", "pi-coding-agent", "omp");
+		const aliasPath = path.join(npmBinDir, "omp");
+		await fs.mkdir(npmBinDir, { recursive: true });
+		await fs.mkdir(path.dirname(managedBinary), { recursive: true });
+		await Bun.write(managedBinary, "binary");
+		await fs.symlink(managedBinary, aliasPath);
+
+		const target = resolveUpdateTargetFromPath(aliasPath, undefined, {
+			allowPackageManagers: false,
+			npmBinDir,
+		});
+
+		expect(target).toEqual({ method: "binary", path: aliasPath, replacesSymlink: true });
+	});
+
 	it("keeps a split-root Bun-linked checkout under Bun management instead of overwriting its script", async () => {
 		const dir = await makeTempDir();
 		const bunBinDir = path.join(dir, "bun-bin");
@@ -655,7 +701,7 @@ describe("update-cli bun cache pruning", () => {
 describe("update-cli release binary integrity", () => {
 	const tag = "v17.1.2";
 	const binaryName = "omp-linux-x64";
-	const url = `https://github.com/can1357/oh-my-pi/releases/download/${tag}/${binaryName}`;
+	const url = `https://github.com/bendytree/oh-my-pi/releases/download/${tag}/${binaryName}`;
 	const content = "verified binary";
 	const digest = `sha256:${createHash("sha256").update(content).digest("hex")}`;
 
@@ -1041,7 +1087,7 @@ describe("update-cli binary-only release gating", () => {
 describe("update-cli script-shim takeover", () => {
 	const version = "18.0.0";
 	const binaryName = "omp-windows-x64.exe";
-	const url = `https://github.com/can1357/oh-my-pi/releases/download/v${version}/${binaryName}`;
+	const url = `https://github.com/bendytree/oh-my-pi/releases/download/v${version}/${binaryName}`;
 
 	function makeFetch(content: string): (input: string | URL | Request) => Promise<Response> {
 		const digest = `sha256:${createHash("sha256").update(content).digest("hex")}`;
@@ -1186,7 +1232,7 @@ describe("update-cli script-shim takeover", () => {
 describe("update-cli concurrent binary updates", () => {
 	const version = "999.0.0";
 	const binaryName = "omp-linux-x64";
-	const url = `https://github.com/can1357/oh-my-pi/releases/download/v${version}/${binaryName}`;
+	const url = `https://github.com/bendytree/oh-my-pi/releases/download/v${version}/${binaryName}`;
 	const payload = Buffer.alloc(2048, 0x41);
 	const digest = `sha256:${createHash("sha256").update(payload).digest("hex")}`;
 

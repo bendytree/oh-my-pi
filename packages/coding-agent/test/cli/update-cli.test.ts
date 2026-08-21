@@ -15,7 +15,7 @@ describe("runUpdateCommand fetch cancellation", () => {
 		const fetchStub = Object.assign(
 			async (_input: FetchInput, init?: FetchInit) => {
 				requestSignal = init?.signal ?? undefined;
-				return Response.json({ version: "999.0.0" });
+				return Response.json({ tag_name: "v999.0.0-fork.1" });
 			},
 			{ preconnect: globalThis.fetch.preconnect },
 		);
@@ -27,26 +27,20 @@ describe("runUpdateCommand fetch cancellation", () => {
 	});
 });
 
-describe("getLatestRelease rename pointers", () => {
+// Fork note: upstream's npm rename-pointer tests do not apply here — this
+// fork's getLatestRelease resolves the latest fork tag from GitHub Releases
+// (see src/cli/fork.ts) and never consults the npm registry.
+describe("getLatestRelease fork releases", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
-	function stubRegistry(manifests: Record<string, unknown>): string[] {
+	function stubGithubRelease(body: unknown): string[] {
 		const urls: string[] = [];
 		const fetchStub = Object.assign(
 			async (input: FetchInput) => {
-				const url = String(input);
-				urls.push(url);
-				let manifest: unknown;
-				for (const pkg in manifests) {
-					if (url.includes(pkg)) {
-						manifest = manifests[pkg];
-						break;
-					}
-				}
-				if (!manifest) return new Response(null, { status: 404, statusText: "Not Found" });
-				return Response.json(manifest);
+				urls.push(String(input));
+				return Response.json(body);
 			},
 			{ preconnect: globalThis.fetch.preconnect },
 		);
@@ -54,38 +48,52 @@ describe("getLatestRelease rename pointers", () => {
 		return urls;
 	}
 
-	it("follows omp.rename to the new package and resolves version, dist, and names from its manifest", async () => {
-		const urls = stubRegistry({
-			"@new/omp": { version: "999.1.0", omp: { dist: "npm" } },
-			"@oh-my-pi/pi-coding-agent": {
-				version: "999.0.0",
-				omp: { dist: "binary", rename: { package: "@new/omp", natives: "@new/natives" } },
-			},
-		});
+	it("resolves the fork tag from GitHub Releases as a binary-only release", async () => {
+		const urls = stubGithubRelease({ tag_name: "v999.1.0-fork.3" });
 
 		const release = await getLatestRelease();
 
-		expect(release.version).toBe("999.1.0");
-		expect(release.dist).toBe("npm");
-		expect(release.packages).toEqual({ pkg: "@new/omp", natives: "@new/natives" });
-		expect(urls).toEqual([
-			"https://registry.npmjs.org/@oh-my-pi/pi-coding-agent/latest",
-			"https://registry.npmjs.org/@new/omp/latest",
-		]);
+		expect(release.version).toBe("999.1.0-fork.3");
+		expect(release.tag).toBe("v999.1.0-fork.3");
+		expect(release.dist).toBe("binary");
+		expect(urls).toEqual(["https://api.github.com/repos/bendytree/oh-my-pi/releases/latest"]);
 	});
 
-	it("ignores a rename pointer that cycles back to an already-visited package", async () => {
-		const urls = stubRegistry({
-			"@oh-my-pi/pi-coding-agent": {
-				version: "999.0.0",
-				omp: { rename: { package: "@oh-my-pi/pi-coding-agent" } },
+	it("rejects a release response with no usable tag_name", async () => {
+		stubGithubRelease({ name: "omp v999.1.0" });
+
+		await expect(getLatestRelease()).rejects.toThrow("Malformed GitHub release response: missing tag_name");
+	});
+});
+
+describe("getLatestRelease proxy errors", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("translates Bun's UnsupportedProxyProtocol fetch failure into an actionable CLI message", async () => {
+		const fetchStub = Object.assign(
+			async () => {
+				throw new Error(
+					'UnsupportedProxyProtocol fetching "https://registry.npmjs.org/@oh-my-pi/pi-coding-agent/latest". ' +
+						"For more information, pass `verbose: true` in the second argument to fetch()",
+				);
 			},
-		});
+			{ preconnect: globalThis.fetch.preconnect },
+		);
+		vi.spyOn(globalThis, "fetch").mockImplementation(fetchStub);
 
-		const release = await getLatestRelease();
+		const err = await getLatestRelease({ timeoutMs: 5000 }).then(
+			() => null,
+			(e: unknown) => e as Error,
+		);
 
-		expect(urls).toHaveLength(1);
-		expect(release.version).toBe("999.0.0");
-		expect(release.packages).toEqual({ pkg: "@oh-my-pi/pi-coding-agent", natives: "@oh-my-pi/pi-natives" });
+		expect(err).toBeInstanceOf(Error);
+		// The raw fetch() instruction the CLI user cannot act on must not leak through.
+		expect(err?.message).not.toContain("verbose: true");
+		expect(err?.message).not.toContain("fetch()");
+		// Instead the user gets actionable guidance about supported proxy schemes.
+		expect(err?.message).toMatch(/SOCKS/i);
+		expect(err?.message).toMatch(/https?:\/\//i);
 	});
 });
