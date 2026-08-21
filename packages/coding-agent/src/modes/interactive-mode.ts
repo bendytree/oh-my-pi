@@ -471,10 +471,13 @@ export function renderSubagentHudLines(sessions: ObservableSession[], columns: n
 			expanded: true,
 			renderItem: session => {
 				const displayId = formatTaskId(session.id);
+				const model = session.progress?.resolvedModel?.trim();
+				const modelSuffix = model ? ` ${theme.fg("dim", `[${model}]`)}` : "";
+				const modelWidth = model ? model.length + 3 : 0;
 				let line = `${dot} ${theme.fg("accent", theme.bold(displayId))}`;
 				const description = session.description?.trim() || session.progress?.description?.trim();
 				if (description) {
-					const budget = Math.max(TRUNCATE_LENGTHS.SHORT, columns - visibleWidth(displayId) - 10);
+					const budget = Math.max(TRUNCATE_LENGTHS.SHORT, columns - visibleWidth(displayId) - modelWidth - 10);
 					line += `${theme.fg("accent", ":")} ${theme.fg("accent", truncateToWidth(replaceTabs(description), budget))}`;
 				} else {
 					// No spawn description: fall back to a muted task preview, same as
@@ -484,7 +487,7 @@ export function renderSubagentHudLines(sessions: ObservableSession[], columns: n
 						line += ` ${theme.fg("muted", truncateToWidth(replaceTabs(taskPreview), TRUNCATE_LENGTHS.SHORT))}`;
 					}
 				}
-				return line;
+				return line + modelSuffix;
 			},
 		},
 		theme,

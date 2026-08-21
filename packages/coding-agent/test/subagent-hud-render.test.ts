@@ -133,6 +133,20 @@ describe("subagent HUD lines", () => {
 		expect(fromTask).toContain("Worker Investigate flaky CI on macOS");
 	});
 
+	it("shows the resolved model next to each row so misrouted spawns are visible", () => {
+		const out = render([
+			makeSession({
+				id: "OcrFinisher",
+				description: "Finishing OCR batch",
+				progress: makeProgress({ id: "OcrFinisher", resolvedModel: "anthropic/claude-opus-5" }),
+			}),
+			makeSession({ id: "NoModelYet", description: "Still resolving" }),
+		]);
+		expect(out).toContain("OcrFinisher: Finishing OCR batch [anthropic/claude-opus-5]");
+		expect(out).toContain("NoModelYet: Still resolving");
+		expect(out).not.toContain("NoModelYet: Still resolving [");
+	});
+
 	it("hides non-detached spawns: sync task calls and eval agent() helpers", () => {
 		// Sync task spawn (parent blocked on the call) and eval `agent()` spawn
 		// (no detached flag at all) both stay off the HUD.

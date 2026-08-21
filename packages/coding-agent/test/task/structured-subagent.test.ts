@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import {
 	artifactsDirsFromRegistry,
@@ -30,6 +31,19 @@ const AGENT: AgentDefinition = {
 	output: { type: "object", properties: { agent: { type: "boolean" } } },
 };
 
+const GPT4O = buildModel({
+	id: "gpt-4o",
+	name: "GPT-4o",
+	api: "openai-completions",
+	provider: "openai",
+	baseUrl: "https://api.openai.com/v1",
+	reasoning: false,
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 128000,
+	maxTokens: 16384,
+});
+
 function session(
 	options: {
 		planMode?: boolean;
@@ -38,6 +52,7 @@ function session(
 		isolationMode?: "none" | "worktree";
 		isolationApply?: boolean;
 		modelRoles?: Record<string, string>;
+		modelRegistry?: unknown;
 	} = {},
 ): ToolSession {
 	return {
@@ -54,6 +69,7 @@ function session(
 		getSessionFile: () => null,
 		getSessionSpawns: () => "*",
 		getPlanModeState: () => (options.planMode ? { enabled: true } : undefined),
+		...(options.modelRegistry ? { modelRegistry: options.modelRegistry } : {}),
 	} as unknown as ToolSession;
 }
 
@@ -253,6 +269,30 @@ describe("structured subagent primitive", () => {
 
 		expect(policy.modelRole).toBe("definition");
 		expect(policy.modelOverride).toEqual(["openai/gpt-4o"]);
+	});
+
+	it("rejects a caller model selector that matches no available model", async () => {
+		mockDiscovery();
+		const registry = { getAvailable: () => [GPT4O] };
+		await expect(
+			resolveEffectiveSubagentPolicy(request({ session: session({ modelRegistry: registry }), model: "opus" })),
+		).rejects.toThrow("Model selector `opus` matches no available model");
+	});
+
+	it("resolves a caller model selector into policy.resolvedModel", async () => {
+		mockDiscovery();
+		const registry = { getAvailable: () => [GPT4O] };
+		const policy = await resolveEffectiveSubagentPolicy(
+			request({ session: session({ modelRegistry: registry }), model: "openai/gpt-4o" }),
+		);
+		expect(policy.resolvedModel).toBe("openai/gpt-4o");
+	});
+
+	it("skips model availability validation without a registry", async () => {
+		mockDiscovery();
+		const policy = await resolveEffectiveSubagentPolicy(request({ model: "opus" }));
+		expect(policy.modelOverride).toEqual(["opus"]);
+		expect(policy.resolvedModel).toBeUndefined();
 	});
 
 	it("does not assign a role when a child uses an explicit model selector", async () => {

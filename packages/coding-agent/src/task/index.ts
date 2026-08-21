@@ -873,6 +873,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 					agent: agentType,
 					agentSource,
 					modelRole: policy.modelRole,
+					resolvedModel: policy.resolvedModel,
 					status: "pending",
 					task: renderSubagentUserPrompt(assignment),
 					assignment,
@@ -916,7 +917,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 			},
 		});
 
-		const started: Array<{ agentId: string; jobId: string }> = [];
+		const started: Array<{ agentId: string; jobId: string; model?: string }> = [];
 		const failedSchedules: string[] = [];
 		for (const spawn of asyncSpawns) {
 			try {
@@ -935,7 +936,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 					},
 				});
 				if (started.length === 0) primaryJobId = jobId;
-				started.push({ agentId: spawn.agentId, jobId });
+				started.push({ agentId: spawn.agentId, jobId, model: spawn.progress.resolvedModel });
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				failedSchedules.push(`${spawn.agentId}: ${message}`);
@@ -974,7 +975,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 
 		if (syncSpawns.length === 0) {
 			if (spawns.length === 1) {
-				const { agentId, jobId } = started[0];
+				const { agentId, jobId, model } = started[0];
 				onUpdate?.({
 					content: [{ type: "text", text: `Spawned agent \`${agentId}\`...` }],
 					details: buildAsyncDetails(),
@@ -983,13 +984,18 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 					content: [
 						{
 							type: "text",
-							text: `Spawned agent \`${agentId}\` (job \`${jobId}\`). Its result auto-delivers on yield unless a settled \`hub jobs\`/\`wait\` snapshot consumes it first. ${coordinationHint}`,
+							text: `Spawned agent \`${agentId}\` (job \`${jobId}\`${model ? `, model \`${model}\`` : ""}). Its result auto-delivers on yield unless a settled \`hub jobs\`/\`wait\` snapshot consumes it first. ${coordinationHint}`,
 						},
 					],
 					details: buildAsyncDetails(),
 				});
 			}
-			const startedListing = started.map(({ agentId, jobId }) => `- \`${agentId}\` (job \`${jobId}\`)`).join("\n");
+			const startedListing = started
+				.map(
+					({ agentId, jobId, model }) =>
+						`- \`${agentId}\` (job \`${jobId}\`${model ? `, model \`${model}\`` : ""})`,
+				)
+				.join("\n");
 			onUpdate?.({
 				content: [{ type: "text", text: `Spawned ${started.length} agents...` }],
 				details: buildAsyncDetails(),
@@ -1524,6 +1530,7 @@ export class TaskTool implements AgentTool<TaskToolSchemaInstance, TaskToolDetai
 			agentName: result.agent,
 			id: result.id,
 			status,
+			resolvedModel: result.resolvedModel,
 			duration: formatDuration(totalDurationMs),
 			abortReason: result.aborted ? result.abortReason : undefined,
 			resumable,

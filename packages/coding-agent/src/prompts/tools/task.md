@@ -56,7 +56,7 @@ Agents marked BLOCKING run inline — results return in this call; non-blocking 
 {{/if}}
 
 # Model Selection
-`model` accepts a fuzzy name (`opus`), an exact `provider/id`, or a role alias (`@smol` fast, `@slow` most capable); append `:low`/`:medium`/`:high` for thinking effort. Unresolvable selectors fall back to the parent session's model.
+`model` accepts a fuzzy name (`opus`), an exact `provider/id`, or a role alias (`@smol` fast, `@slow` most capable); append `:low`/`:medium`/`:high` for thinking effort. An unresolvable selector fails the spawn — it is never silently replaced with another model.
 {{#if modelRolesText}}
 Configured roles: {{modelRolesText}}.
 {{/if}}

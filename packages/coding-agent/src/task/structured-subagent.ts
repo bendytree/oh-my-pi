@@ -8,7 +8,13 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { $env, prompt, Snowflake } from "@oh-my-pi/pi-utils";
-import { resolveAgentModelSelection } from "../config/model-resolver";
+import {
+	formatModelSelectorValue,
+	formatModelStringWithRouting,
+	resolveAgentModelSelection,
+	resolveConfiguredModelPatterns,
+	resolveModelOverride,
+} from "../config/model-resolver";
 import type { LocalProtocolOptions } from "../internal-urls";
 import { registerArtifactsDir } from "../internal-urls/registry-helpers";
 import { MCPManager } from "../mcp/manager";
@@ -125,6 +131,8 @@ export interface EffectiveSubagentPolicy {
 	modelOverride?: string | string[];
 	/** Explicit pre-expansion model role alias selected for this run. */
 	modelRole?: string;
+	/** Preflight-resolved model display string (`provider/id[:level]`), when the registry could resolve one. */
+	resolvedModel?: string;
 	parentActiveModelPattern?: string;
 	schema: StructuredSubagentSchemaResolution;
 	planMode: boolean;
@@ -292,6 +300,42 @@ export async function resolveEffectiveSubagentPolicy(
 	// from different sources: the expansion below discards the alias, and the
 	// child's inherited retry-fallback chain is keyed off the role.
 	const { patterns: modelOverride, role: modelRole } = resolveAgentModelSelection(modelResolution);
+	// A caller-forced `model` MUST resolve. The legacy behavior — silently
+	// spawning on the parent's or agent's model instead — is how a caller ends
+	// up believing it launched a different model than it actually did.
+	const modelRegistry = request.session.modelRegistry;
+	const requestedSelectors = (Array.isArray(request.model) ? request.model : [request.model ?? ""])
+		.filter((entry): entry is string => typeof entry === "string")
+		.map(entry => entry.trim())
+		.filter(entry => entry.length > 0);
+	if (requestedSelectors.length > 0) {
+		const label = requestedSelectors.map(entry => `\`${entry}\``).join(", ");
+		const requestPatterns = resolveConfiguredModelPatterns(request.model, request.session.settings);
+		if (requestPatterns.length === 0) {
+			throw new StructuredSubagentError(
+				"preflight",
+				`Model selector ${label} names no configured model role and expands to no model pattern. Use a configured role alias, a fuzzy model name, or an exact provider/id — or omit \`model\` for the agent's default.`,
+			);
+		}
+		if (modelRegistry && modelRegistry.getAvailable().length > 0) {
+			const requestResolution = resolveModelOverride(requestPatterns, modelRegistry, request.session.settings);
+			if (!requestResolution.model) {
+				throw new StructuredSubagentError(
+					"preflight",
+					`Model selector ${label} matches no available model${requestResolution.warning ? ` (${requestResolution.warning})` : ""}. Use a configured role alias or an exact provider/id, or omit \`model\` for the agent's default.`,
+				);
+			}
+		}
+	}
+	let resolvedModel: string | undefined;
+	if (modelRegistry && modelOverride.length > 0) {
+		const resolution = resolveModelOverride(modelOverride, modelRegistry, request.session.settings);
+		if (resolution.model) {
+			resolvedModel = resolution.explicitThinkingLevel
+				? formatModelSelectorValue(formatModelStringWithRouting(resolution.model), resolution.thinkingLevel)
+				: formatModelStringWithRouting(resolution.model);
+		}
+	}
 	const isolationMode = request.session.settings.get("task.isolation.mode");
 	const isIsolated = request.isolation?.requested === true;
 	if (isIsolated && isolationMode === "none") {
@@ -307,6 +351,7 @@ export async function resolveEffectiveSubagentPolicy(
 		effectiveAgent,
 		modelOverride,
 		modelRole,
+		resolvedModel,
 		parentActiveModelPattern,
 		schema,
 		planMode,
