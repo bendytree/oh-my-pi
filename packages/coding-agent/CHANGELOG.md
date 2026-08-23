@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [17.4.2] - 2026-08-23
+
 ### Added
 
 - Added an optional `model` field to `task` tool spawns (flat and batch items) that forces a specific model for that subagent, overriding settings and agent-definition defaults. Accepts fuzzy names (`opus`), exact `provider/id`, or `@role` aliases; the tool description now surfaces configured roles and recently used models as selector hints.
@@ -16,6 +18,7 @@
 ### Removed
 
 - Removed the `/loop` slash command. Loop mode can no longer be enabled; typing `/loop` now falls through like any unknown command.
+
 ## [17.4.1] - 2026-08-21
 
 ### Added
