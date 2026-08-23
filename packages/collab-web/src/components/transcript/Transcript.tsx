@@ -252,6 +252,7 @@ export function Transcript(props: TranscriptProps): ReactNode {
 	}, [entries]);
 
 	const rootRef = useRef<HTMLDivElement | null>(null);
+	const contentRef = useRef<HTMLDivElement | null>(null);
 	const lockRef = useRef(true);
 
 	// Follow the tail while bottom-locked; releasing/re-arming happens in onScroll.
@@ -259,6 +260,20 @@ export function Transcript(props: TranscriptProps): ReactNode {
 		const el = rootRef.current;
 		if (el !== null && lockRef.current) el.scrollTop = el.scrollHeight;
 	}, [entries, stream, activeTools, working]);
+
+	// Content height keeps changing after the deps-driven effect (fonts, images,
+	// highlight layout) — especially on mobile initial load. Re-pin on any resize
+	// while bottom-locked so the view lands at the true bottom.
+	useEffect(() => {
+		const el = rootRef.current;
+		const content = contentRef.current;
+		if (el === null || content === null) return;
+		const observer = new ResizeObserver(() => {
+			if (lockRef.current) el.scrollTop = el.scrollHeight;
+		});
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, []);
 
 	// Active tools not already represented as toolCall blocks in committed rows or the stream ghost.
 	const renderedToolIds = new Set<string>();
@@ -289,42 +304,44 @@ export function Transcript(props: TranscriptProps): ReactNode {
 				}
 			}}
 		>
-			{entries.length === 0 && stream === null && !working && <div className="tr-empty">no activity yet</div>}
-			{entries.map(entry => (
-				<EntryRow key={entry.id} entry={entry} results={results} active={activeTools} host={host} />
-			))}
-			{stream !== null && (
-				<Row kind="assistant" gutter="agent">
-					<AssistantBody
-						message={stream}
-						results={results}
-						active={activeTools}
-						pending={!streamDone}
-						host={host}
-					/>
-				</Row>
-			)}
-			{tailTools.length > 0 && (
-				<Row kind="assistant" gutter={stream === null ? "agent" : ""}>
-					{tailTools.map(tool => (
-						<ToolCard
-							key={tool.toolCallId}
-							toolCallId={tool.toolCallId}
-							name={tool.toolName}
-							intent={tool.intent}
-							args={tool.args}
-							running
-							partialResult={tool.partialResult}
+			<div ref={contentRef}>
+				{entries.length === 0 && stream === null && !working && <div className="tr-empty">no activity yet</div>}
+				{entries.map(entry => (
+					<EntryRow key={entry.id} entry={entry} results={results} active={activeTools} host={host} />
+				))}
+				{stream !== null && (
+					<Row kind="assistant" gutter="agent">
+						<AssistantBody
+							message={stream}
+							results={results}
+							active={activeTools}
+							pending={!streamDone}
 							host={host}
 						/>
-					))}
-				</Row>
-			)}
-			{working && stream === null && activeTools.size === 0 && (
-				<Row kind="assistant" gutter="agent">
-					<div className="tr-shimmer">thinking…</div>
-				</Row>
-			)}
+					</Row>
+				)}
+				{tailTools.length > 0 && (
+					<Row kind="assistant" gutter={stream === null ? "agent" : ""}>
+						{tailTools.map(tool => (
+							<ToolCard
+								key={tool.toolCallId}
+								toolCallId={tool.toolCallId}
+								name={tool.toolName}
+								intent={tool.intent}
+								args={tool.args}
+								running
+								partialResult={tool.partialResult}
+								host={host}
+							/>
+						))}
+					</Row>
+				)}
+				{working && stream === null && activeTools.size === 0 && (
+					<Row kind="assistant" gutter="agent">
+						<div className="tr-shimmer">thinking…</div>
+					</Row>
+				)}
+			</div>
 		</div>
 	);
 }
