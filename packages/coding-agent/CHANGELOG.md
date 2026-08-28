@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- `/collab` no longer prints a QR code with the join link.
+
 ## [18.0.2] - 2026-08-28
 
 ### Added

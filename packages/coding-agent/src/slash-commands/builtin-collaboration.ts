@@ -1,4 +1,3 @@
-import { Spacer } from "@oh-my-pi/pi-tui";
 import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { CollabGuestLink } from "../collab/guest";
 import { CollabHost } from "../collab/host";
@@ -12,7 +11,6 @@ import { extractLastCodeBlock, extractLastCommand } from "../modes/utils/copy-ta
 import { urlHyperlinkAlways } from "../tui";
 import { copyToClipboard } from "../utils/clipboard";
 import { refreshStatusLine } from "./builtin-modes";
-import { CollabQrCodeComponent } from "./helpers/collab-qrcode";
 import { commandConsumed, errorMessage, parseSubcommand, usage } from "./helpers/parse";
 import type { SlashCommandSpec } from "./types";
 
@@ -40,17 +38,8 @@ function collabLinkHint(host: CollabHost, heading: string, view = false): string
 	].join("\n");
 }
 
-function showCollabQrCode(ctx: InteractiveModeContext, webLink: string): void {
-	try {
-		ctx.present([new Spacer(1), new CollabQrCodeComponent(webLink)]);
-	} catch (err) {
-		ctx.showError(`Failed to render collab QR code: ${errorMessage(err)}`);
-	}
-}
-
 function showCollabLink(ctx: InteractiveModeContext, host: CollabHost, heading: string, view = false): void {
 	ctx.showStatus(collabLinkHint(host, heading, view), { dim: false });
-	showCollabQrCode(ctx, view ? host.webViewLink : host.webLink);
 }
 
 export const BUILTIN_COLLABORATION_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpec> = [
