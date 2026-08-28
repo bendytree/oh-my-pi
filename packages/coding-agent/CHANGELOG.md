@@ -2,26 +2,12 @@
 
 ## [Unreleased]
 
+## [18.0.2] - 2026-08-28
+
 ### Added
 
 - Added an optional `thinkingBg` theme color that paints a full-width background behind thinking blocks (TUI and HTML export); `titanium-contrast` now sets it.
 
-## [17.4.2] - 2026-08-23
-
-### Added
-
-- Added an optional `model` field to `task` tool spawns (flat and batch items) that forces a specific model for that subagent, overriding settings and agent-definition defaults. Accepts fuzzy names (`opus`), exact `provider/id`, or `@role` aliases; the tool description now surfaces configured roles and recently used models as selector hints.
-- Added a session-local `schedule` tool and `/schedule` command: register recurring (`every 20m`) or one-shot (`at 21:00`) prompts; each fire spawns a fresh-context subagent and its result auto-delivers into the session as a background job. Schedules die with the session — no persistence, no re-arming.
-- Added bundled `titanium-contrast` theme (titanium with a blue user-message bubble).
-- Added an optional `mdBold` theme color for markdown bold text; themes without it keep the surrounding text color.
-
-### Changed
-
-- The built-in `titanium` theme now uses a blue user-message bubble (`#1e3a5f`), matching `titanium-contrast`.
-
-### Removed
-
-- Removed the `/loop` slash command. Loop mode can no longer be enabled; typing `/loop` now falls through like any unknown command.
 ## [18.0.1] - 2026-08-23
 
 ### Added
@@ -29,7 +15,6 @@
 - Plan review can save a plan to a chosen path and start a new session.
 - Edit results now warn when an edit leaves a previously parsing file unparseable, independent of the `edit.blackbox.enabled` recorder.
 - Added provider-wide Amazon Bedrock guardrail settings to models configuration, including custom models.
-
 - Added the `/pin` slash command to pin and unpin sessions so they stay at the top of the `--resume` picker UI.
 - Optional edit parse-regression capture appends the before/after content, model, variant, and arguments to `~/.omp/agent/edit-blackbox.jsonl` when `edit.blackbox.enabled` is enabled.
 
@@ -171,6 +156,23 @@
 ### Fixed
 
 - Fixed the edit tool rejecting payloads containing a glued `«»` line: after MATCH it now reads as the mistyped `»` separator, elsewhere as a stray terminator to drop.
+
+## [17.4.2] - 2026-08-23
+
+### Added
+
+- Added an optional `model` field to `task` tool spawns (flat and batch items) that forces a specific model for that subagent, overriding settings and agent-definition defaults. Accepts fuzzy names (`opus`), exact `provider/id`, or `@role` aliases; the tool description now surfaces configured roles and recently used models as selector hints.
+- Added a session-local `schedule` tool and `/schedule` command: register recurring (`every 20m`) or one-shot (`at 21:00`) prompts; each fire spawns a fresh-context subagent and its result auto-delivers into the session as a background job. Schedules die with the session — no persistence, no re-arming.
+- Added bundled `titanium-contrast` theme (titanium with a blue user-message bubble).
+- Added an optional `mdBold` theme color for markdown bold text; themes without it keep the surrounding text color.
+
+### Changed
+
+- The built-in `titanium` theme now uses a blue user-message bubble (`#1e3a5f`), matching `titanium-contrast`.
+
+### Removed
+
+- Removed the `/loop` slash command. Loop mode can no longer be enabled; typing `/loop` now falls through like any unknown command.
 
 ## [17.4.2] - 2026-08-21
 

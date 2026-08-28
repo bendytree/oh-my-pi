@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [18.0.2] - 2026-08-28
+
 ### Added
 
 - Header "clear" button hides everything before the latest agent message (view-only; a "show all" strip restores it).
