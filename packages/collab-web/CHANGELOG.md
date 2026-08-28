@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Header "clear" button hides everything before the latest agent message (view-only; a "show all" strip restores it).
+
+### Fixed
+
+- Auto-scroll no longer sticks mid-page on load: content growth (fonts, images, highlighting) could release the bottom lock before layout settled; only a real user scroll-up releases it now.
+
+### Removed
+
+- Collaborator avatars in the header; frees space for the header buttons.
+
 ## [17.3.8] - 2026-08-19
 
 ### Fixed

@@ -254,6 +254,7 @@ export function Transcript(props: TranscriptProps): ReactNode {
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const contentRef = useRef<HTMLDivElement | null>(null);
 	const lockRef = useRef(true);
+	const prevTopRef = useRef(0);
 
 	// Follow the tail while bottom-locked; releasing/re-arming happens in onScroll.
 	useEffect(() => {
@@ -300,7 +301,19 @@ export function Transcript(props: TranscriptProps): ReactNode {
 			onScroll={() => {
 				const el = rootRef.current;
 				if (el !== null) {
-					lockRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 40;
+					const top = el.scrollTop;
+					const atBottom = el.scrollHeight - top - el.clientHeight <= 40;
+					if (atBottom) {
+						lockRef.current = true;
+					} else if (top < prevTopRef.current) {
+						// Only a user scroll-up releases the lock; content growth
+						// (fonts, images, highlight) also fires scroll events with a
+						// not-at-bottom position and must not break the follow.
+						lockRef.current = false;
+					} else if (lockRef.current) {
+						el.scrollTop = el.scrollHeight;
+					}
+					prevTopRef.current = el.scrollTop;
 				}
 			}}
 		>

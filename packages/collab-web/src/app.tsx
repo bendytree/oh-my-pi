@@ -123,6 +123,8 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 	const snap = useGuestSnapshot(client);
 	const [railOpen, setRailOpen] = useState(false);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// Client-side transcript trim: entries before this id are hidden (not removed).
+	const [clearCutoffId, setClearCutoffId] = useState<string | null>(null);
 	const autoOpenedRef = useRef(false);
 
 	const subCount = useMemo(() => snap.agents.filter(a => a.kind === "sub").length, [snap.agents]);
@@ -147,6 +149,27 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 		}
 	}, [subCount]);
 
+	// Hide everything before the latest assistant message (view-only; context untouched).
+	const clearTranscript = useCallback((): void => {
+		const entries = snap.entries;
+		let cut = entries.length - 1;
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i];
+			if (entry.type === "message" && entry.message.role === "assistant") {
+				cut = i;
+				break;
+			}
+		}
+		setClearCutoffId(entries[cut]?.id ?? null);
+	}, [snap.entries]);
+
+	const cutIndex = useMemo(() => {
+		if (clearCutoffId === null) return 0;
+		const i = snap.entries.findIndex(entry => entry.id === clearCutoffId);
+		return i > 0 ? i : 0;
+	}, [snap.entries, clearCutoffId]);
+	const visibleEntries = cutIndex > 0 ? snap.entries.slice(cutIndex) : snap.entries;
+
 	const title = snap.header?.title ?? snap.state?.sessionName ?? "session";
 	useEffect(() => {
 		document.title = `${title} · omp collab`;
@@ -162,12 +185,24 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 				railOpen={railOpen}
 				onToggleRail={() => setRailOpen(open => !open)}
 				onLeave={onLeave}
+				canClear={snap.entries.length > 1}
+				onClear={clearTranscript}
 			/>
 			<main className="sh-main">
 				<section className="sh-content" data-rail={railOpen ? "true" : "false"}>
 					<div className="sh-transcript">
+						{cutIndex > 0 && (
+							<div className="sh-cleared-note">
+								<span>
+									{cutIndex} earlier {cutIndex === 1 ? "message" : "messages"} hidden
+								</span>
+								<button type="button" className="sh-btn" onClick={() => setClearCutoffId(null)}>
+									show all
+								</button>
+							</div>
+						)}
 						<Transcript
-							entries={snap.entries}
+							entries={visibleEntries}
 							stream={snap.stream}
 							streamDone={snap.streamDone}
 							activeTools={snap.activeTools}

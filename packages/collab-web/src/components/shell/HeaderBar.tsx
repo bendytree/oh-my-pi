@@ -1,4 +1,4 @@
-import { LogOut, PanelRight } from "lucide-react";
+import { Eraser, LogOut, PanelRight } from "lucide-react";
 import type { ReactNode } from "react";
 import type { GuestSnapshot } from "../../lib/client";
 import { fmtPercent, shortenPath } from "../../lib/format";
@@ -10,9 +10,19 @@ export interface HeaderBarProps {
 	railOpen: boolean;
 	onToggleRail(): void;
 	onLeave(): void;
+	canClear: boolean;
+	onClear(): void;
 }
 
-export function HeaderBar({ snapshot, subCount, railOpen, onToggleRail, onLeave }: HeaderBarProps): ReactNode {
+export function HeaderBar({
+	snapshot,
+	subCount,
+	railOpen,
+	onToggleRail,
+	onLeave,
+	canClear,
+	onClear,
+}: HeaderBarProps): ReactNode {
 	const { header, state, phase, readOnly } = snapshot;
 	const title = header?.title ?? state?.sessionName ?? "session";
 	const usage = state?.contextUsage;
@@ -56,21 +66,18 @@ export function HeaderBar({ snapshot, subCount, railOpen, onToggleRail, onLeave 
 						<span className="sh-gauge-pct">{fmtPercent(pct)}</span>
 					</span>
 				)}
-				{state && state.participants.length > 0 && (
-					<span className="sh-avatars">
-						{state.participants.map((p, i) => (
-							<span
-								key={`${p.name}:${i}`}
-								className={p.role === "host" ? "sh-avatar sh-avatar-host" : "sh-avatar"}
-								title={`${p.name} · ${p.role}${p.readOnly ? " · view-only" : ""}`}
-							>
-								{(p.name[0] ?? "?").toUpperCase()}
-							</span>
-						))}
-					</span>
-				)}
 				<span className={`sh-dot sh-dot-${phase}`} title={phase} />
 				<ThemeToggle />
+				{canClear && (
+					<button
+						type="button"
+						className="sh-btn sh-btn-icon"
+						onClick={onClear}
+						title="hide older messages (view only — context is untouched)"
+					>
+						<Eraser size={14} />
+					</button>
+				)}
 				<button
 					type="button"
 					className={railOpen ? "sh-btn sh-btn-icon sh-btn-on" : "sh-btn sh-btn-icon"}
