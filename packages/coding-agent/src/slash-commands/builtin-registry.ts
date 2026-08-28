@@ -1,5 +1,6 @@
 import type { AutocompleteItem } from "@oh-my-pi/pi-tui";
 import { COLLAB_GUEST_ALLOWED_COMMANDS } from "../collab/guest";
+import { COLLAB_HOST_EXECUTED_COMMANDS } from "../collab/protocol";
 import { BUILTIN_COLLABORATION_SLASH_COMMANDS } from "./builtin-collaboration";
 import {
 	buildArgumentCompletions,
@@ -129,8 +130,16 @@ export async function executeBuiltinSlashCommand(
 		return false;
 	}
 	// Collab guests run a read-mostly replica: session-mutating builtins are
-	// host-only; the allowlist covers purely local/read-only commands.
+	// host-only; the allowlist covers purely local/read-only commands, and
+	// host-executed lifecycle commands (/clear, /compact) forward to the host
+	// as prompt frames it intercepts and runs.
 	if (runtime.ctx.collabGuest && !COLLAB_GUEST_ALLOWED_COMMANDS[command.name]) {
+		if (COLLAB_HOST_EXECUTED_COMMANDS[command.name] && !runtime.ctx.collabGuest.readOnly) {
+			runtime.ctx.collabGuest.sendPrompt(text);
+			runtime.ctx.showStatus(`/${command.name} sent to host`);
+			runtime.ctx.editor.setText("");
+			return true;
+		}
 		runtime.ctx.showStatus(`/${command.name} is host-only during a collab session`);
 		runtime.ctx.editor.setText("");
 		return true;

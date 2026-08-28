@@ -104,7 +104,9 @@ test("EvalTool omits tools the model can still call directly", () => {
 		hasUI: false,
 		getSessionFile: () => null,
 		settings: Settings.isolated(),
-		toolRegistry: new Map([
+		// Explicit value type: inferring a common tuple type from the two
+		// heterogeneous FluentType parameter shapes is checker-order-sensitive.
+		toolRegistry: new Map<string, unknown>([
 			["read", read],
 			["write", write],
 		]),

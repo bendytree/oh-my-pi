@@ -276,6 +276,11 @@ export class Theme {
 		return `${ansi}${text}\x1b[49m`; // Reset only background color
 	}
 
+	/** Whether the theme defines an optional background token (e.g. `thinkingBg`). */
+	hasBg(color: ThemeBg): boolean {
+		return this.#bgColors[color] !== undefined;
+	}
+
 	/**
 	 * Apply a background fill that resumes after nested full/background resets.
 	 *

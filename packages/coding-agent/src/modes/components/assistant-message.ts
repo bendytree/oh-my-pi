@@ -798,10 +798,17 @@ export class AssistantMessageComponent extends Container {
 							(c.type === "thinking" && resolveThinkingDisplay(c, this.proseOnlyThinking).visible),
 					);
 
-				// Thinking traces in thinkingText color, italic
+				// Thinking traces in thinkingText color, italic; optional thinkingBg
+				// paints a full-width bubble like userMessageBg does for user turns.
+				// The closure checks hasBg at render time, not construction time:
+				// `theme` is a live binding, so a mid-life theme switch must drop or
+				// gain the fill instead of throwing on a missing optional token. An
+				// identity bgColor renders byte-identical to omitting it, and the
+				// bgColorProbe invalidates the render cache when the output changes.
 				const md = new Markdown(thinkingText, 1, 0, getMarkdownTheme(), {
 					color: (text: string) => theme.fg("thinkingText", text),
 					italic: true,
+					bgColor: (text: string) => (theme.hasBg("thinkingBg") ? theme.bg("thinkingBg", text) : text),
 				});
 				md.transientRenderCache = this.#lastUpdateTransient;
 				this.#contentContainer.addChild(md);

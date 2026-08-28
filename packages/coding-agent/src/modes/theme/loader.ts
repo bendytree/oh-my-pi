@@ -164,6 +164,7 @@ export function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = 
 		"selectedBg",
 		"userMessageBg",
 		"customMessageBg",
+		"thinkingBg",
 		"toolPendingBg",
 		"toolSuccessBg",
 		"toolErrorBg",

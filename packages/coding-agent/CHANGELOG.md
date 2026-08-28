@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an optional `thinkingBg` theme color that paints a full-width background behind thinking blocks (TUI and HTML export); `titanium-contrast` now sets it.
+
 ## [17.4.2] - 2026-08-23
 
 ### Added

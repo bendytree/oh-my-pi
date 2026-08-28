@@ -35,7 +35,7 @@ describe("SessionManager collab replication", () => {
 			],
 			timestamp: Date.now(),
 		});
-		// Persistence is deferred until an assistant message exists; force it.
+		// Flush the append (user messages persist eagerly) before reading the file.
 		await manager.rewriteEntries();
 
 		expect(captured).toHaveLength(1);

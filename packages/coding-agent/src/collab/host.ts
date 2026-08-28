@@ -26,13 +26,17 @@ import type { InteractiveModeContext } from "../modes/types";
 import { AgentLifecycleManager } from "../registry/agent-lifecycle";
 import { type AgentRef, AgentRegistry } from "../registry/agent-registry";
 import type { AgentSessionEvent } from "../session/agent-session";
+import { parseCompactArgs } from "../session/compact-modes";
 import { stripImagesFromMessage, USER_INTERRUPT_LABEL } from "../session/messages";
 import type { SessionEntry as StoredSessionEntry } from "../session/session-entries";
+import { parseSlashCommand } from "../slash-commands/helpers/parse";
+import type { ParsedSlashCommand } from "../slash-commands/types";
 import { TASK_SUBAGENT_LIFECYCLE_CHANNEL, TASK_SUBAGENT_PROGRESS_CHANNEL } from "../task/types";
 import { generateRoomKey, generateWriteToken, importRoomKey } from "./crypto";
 import { collabDisplayName } from "./display-name";
 import {
 	type AgentSnapshot,
+	COLLAB_HOST_EXECUTED_COMMANDS,
 	COLLAB_PROMPT_MESSAGE_TYPE,
 	COLLAB_PROTO,
 	type CollabFrame,
@@ -523,6 +527,15 @@ export class CollabHost {
 			return;
 		}
 		const name = peer.name;
+		// Host-executed slash commands (/clear, /compact): run them here instead
+		// of prompting so they behave like the host typing them. Anything else
+		// starting with "/" (skills, file commands, plain prose) flows through
+		// as a normal prompt.
+		const parsedCommand = parseSlashCommand(text.trim());
+		if (parsedCommand && COLLAB_HOST_EXECUTED_COMMANDS[parsedCommand.name]) {
+			void this.#runGuestCommand(parsedCommand, name, fromPeer);
+			return;
+		}
 		const content: string | (TextContent | ImageContent)[] =
 			images && images.length > 0 ? [{ type: "text", text }, ...images] : text;
 		const details: CollabPromptDetails = { from: name };
@@ -546,6 +559,45 @@ export class CollabHost {
 				logger.warn("collab guest prompt failed", { error: String(err) });
 				this.#socket?.send({ t: "error", message: `prompt failed: ${String(err)}` }, fromPeer);
 			});
+	}
+
+	/**
+	 * Execute a {@link COLLAB_HOST_EXECUTED_COMMANDS} builtin on behalf of a
+	 * writable guest. Failures go back to the requesting peer as a targeted
+	 * `error` frame; success is announced to everyone via a session notice
+	 * (a replicated wire event).
+	 */
+	async #runGuestCommand(command: ParsedSlashCommand, guestName: string, fromPeer: number): Promise<void> {
+		try {
+			switch (command.name) {
+				case "clear": {
+					if (this.#ctx.session.isStreaming) {
+						this.#socket?.send(
+							{ t: "error", message: "/clear: interrupt the agent first (esc), then retry" },
+							fromPeer,
+						);
+						return;
+					}
+					await this.#ctx.handleResetContextCommand();
+					this.#ctx.session.emitNotice("info", `${guestName} cleared the context`, "collab");
+					break;
+				}
+				case "compact": {
+					const parsed = parseCompactArgs(command.args);
+					if ("error" in parsed) {
+						this.#socket?.send({ t: "error", message: parsed.error }, fromPeer);
+						return;
+					}
+					this.#ctx.session.emitNotice("info", `${guestName} started /compact`, "collab");
+					await this.#ctx.handleCompactCommand(parsed.instructions, parsed.mode);
+					break;
+				}
+			}
+			this.#scheduleStateBroadcast();
+		} catch (err) {
+			logger.warn("collab guest command failed", { command: command.name, error: String(err) });
+			this.#socket?.send({ t: "error", message: `/${command.name} failed: ${String(err)}` }, fromPeer);
+		}
 	}
 
 	#handleAbort(fromPeer: number): void {

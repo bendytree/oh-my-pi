@@ -680,6 +680,7 @@
     .thinking-text {
       display: none;
       color: var(--thinkingText, var(--muted));
+      background: var(--thinkingBg, transparent);
       font-style: italic;
       font-size: 11.5px;
       white-space: pre-wrap;

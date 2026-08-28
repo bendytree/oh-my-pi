@@ -206,8 +206,8 @@ export function computeDefaultSessionDir(
  * find "this terminal's last session" even when running concurrent instances.
  *
  * `fresh` marks a `/new` (or freshly-minted) session boundary whose JSONL is
- * not yet materialized (new-session persistence is lazy until assistant output
- * exists). A fresh breadcrumb is honored by {@link readTerminalBreadcrumbEntry}
+ * not yet materialized (new-session persistence is lazy until a conversation
+ * message exists). A fresh breadcrumb is honored by {@link readTerminalBreadcrumbEntry}
  * even when its target file is still absent, so relaunch/auto-resume reopens the
  * post-`/new` session instead of falling back to the pre-`/new` transcript. Once
  * the session materializes the caller rewrites the breadcrumb with `fresh:false`

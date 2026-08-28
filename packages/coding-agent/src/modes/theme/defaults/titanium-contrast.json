@@ -26,6 +26,7 @@
 		"dim": "#6b7280",
 		"text": "",
 		"thinkingText": "dimAluminum",
+		"thinkingBg": "#1c222b",
 		"selectedBg": "deepBlue",
 		"userMessageBg": "#1e3a5f",
 		"userMessageText": "brightAluminum",

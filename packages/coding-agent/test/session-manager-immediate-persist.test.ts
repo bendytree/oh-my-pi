@@ -91,16 +91,18 @@ describe("SessionManager JSONL software-crash durability", () => {
 		const sessionFile = manager.getSessionFile();
 		if (!sessionFile) throw new Error("Expected a persisted session file path");
 
+		// First conversation message (the user prompt) materializes the file via
+		// the synchronous rewrite path — a crash mid-first-turn keeps the prompt.
 		manager.appendMessage({ role: "user", content: "queued before assistant", timestamp: Date.now() });
-		expect(fs.existsSync(sessionFile)).toBe(false);
-
-		// First assistant materializes the file via the synchronous rewrite path.
-		manager.appendMessage(assistantMessage("hello"));
 		expect(fs.existsSync(sessionFile)).toBe(true);
 
 		let entries = readJsonl(sessionFile);
-		expect(entries).toHaveLength(3);
+		expect(entries).toHaveLength(2);
 		expect(messageRole(entries[1] ?? {})).toBe("user");
+
+		manager.appendMessage(assistantMessage("hello"));
+		entries = readJsonl(sessionFile);
+		expect(entries).toHaveLength(3);
 		expect(messageRole(entries[2] ?? {})).toBe("assistant");
 
 		// Hot-path appends must land in the OS page cache before the call returns.
@@ -216,7 +218,7 @@ describe("SessionManager JSONL software-crash durability", () => {
 		await resumed.close();
 	});
 
-	it("keeps pre-assistant sessions out of history during shutdown", async () => {
+	it("keeps prompt-less sessions out of history but persists a prompt-only session", async () => {
 		const cwd = makeTempDir("@pi-empty-session-cwd-");
 		const sessionDir = path.join(cwd, "sessions");
 		const manager = SessionManager.create(cwd, sessionDir);
@@ -229,28 +231,29 @@ describe("SessionManager JSONL software-crash durability", () => {
 		expect(fs.existsSync(sessionFile)).toBe(false);
 		expect(await SessionManager.list(cwd, sessionDir)).toHaveLength(0);
 
+		// A typed prompt alone materializes the session: a process kill before
+		// any assistant output must not lose it from /resume.
 		manager.appendMessage({ role: "user", content: "queued before assistant", timestamp: Date.now() });
-		manager.flushSync();
 
-		expect(fs.existsSync(sessionFile)).toBe(false);
-		expect(await SessionManager.list(cwd, sessionDir)).toHaveLength(0);
+		expect(fs.existsSync(sessionFile)).toBe(true);
+		expect(await SessionManager.list(cwd, sessionDir)).toHaveLength(1);
 	});
 
-	it("lets explicit rewrites materialize pre-assistant entries", async () => {
+	it("lets explicit rewrites materialize pre-message metadata entries", async () => {
 		const cwd = makeTempDir("@pi-explicit-rewrite-cwd-");
 		const sessionDir = path.join(cwd, "sessions");
 		const manager = SessionManager.create(cwd, sessionDir);
 		const sessionFile = manager.getSessionFile();
 		if (!sessionFile) throw new Error("Expected a persisted session file path");
 
-		manager.appendMessage({ role: "user", content: "persist me", timestamp: Date.now() });
+		manager.appendCustomEntry("my_marker", { note: "persist me" });
+		expect(fs.existsSync(sessionFile)).toBe(false);
 		await manager.rewriteEntries();
 
 		expect(fs.existsSync(sessionFile)).toBe(true);
 		const entries = readJsonl(sessionFile);
 		expect(entries).toHaveLength(2);
-		expect(messageRole(entries[1] ?? {})).toBe("user");
-		expect(messageContent(entries[1] ?? {})).toBe("persist me");
+		expect(entryKind(entries[1] ?? {})).toBe("custom:my_marker");
 	});
 
 	it("makes fenced appends durable while an atomic rewrite is paused", async () => {

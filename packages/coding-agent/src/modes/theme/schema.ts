@@ -19,6 +19,7 @@ const themeColorsSchema = type({
 	dim: "string | number",
 	text: "string | number",
 	thinkingText: "string | number",
+	"thinkingBg?": "string | number",
 	selectedBg: "string | number",
 	userMessageBg: "string | number",
 	userMessageText: "string | number",
@@ -258,6 +259,7 @@ export type ThemeBg =
 	| "selectedBg"
 	| "userMessageBg"
 	| "customMessageBg"
+	| "thinkingBg"
 	| "toolPendingBg"
 	| "toolSuccessBg"
 	| "toolErrorBg"

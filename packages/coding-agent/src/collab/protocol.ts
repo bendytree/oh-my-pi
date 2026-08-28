@@ -45,6 +45,18 @@ export { DEFAULT_RELAY_URL, ENVELOPE_HEADER_LENGTH, ROOM_ID_BYTES };
 export type CollabParticipant = Participant;
 export type AgentSnapshot = WireAgentSnapshot;
 
+/**
+ * Builtin slash commands a writable guest may run on the host. The guest TUI
+ * forwards these verbatim as `prompt` frames; the host intercepts them in
+ * `CollabHost.#handlePrompt` before they would reach the model, so web guests
+ * (which send raw text) get the same behavior for free. Everything else stays
+ * host-only.
+ */
+export const COLLAB_HOST_EXECUTED_COMMANDS: Record<string, true> = {
+	clear: true,
+	compact: true,
+};
+
 /** Debounced footer snapshot broadcast by the host. */
 export type CollabSessionState = SessionState & {
 	/**

@@ -33,7 +33,7 @@
 		},
 		"colors": {
 			"type": "object",
-			"description": "Theme color definitions (all required except thinkingMax)",
+			"description": "Theme color definitions (all required except mdBold, thinkingMax, thinkingBg)",
 			"required": [
 				"accent",
 				"border",
@@ -146,6 +146,10 @@
 				"thinkingText": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Thinking text color"
+				},
+				"thinkingBg": {
+					"$ref": "#/$defs/colorValue",
+					"description": "Optional background behind thinking blocks (omit for terminal default)"
 				},
 				"selectedBg": {
 					"$ref": "#/$defs/colorValue",

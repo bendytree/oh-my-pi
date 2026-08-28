@@ -198,10 +198,6 @@ function addUsage(target: UsageStatistics, usage: Usage | undefined): void {
 	target.cost += usage.cost.total;
 }
 
-function isAssistantEntry(entry: SessionEntry): boolean {
-	return entry.type === "message" && entry.message.role === "assistant";
-}
-
 function isDraftOnlyMetadataEntry(entry: SessionEntry): boolean {
 	// Startup-recorded selector state that does not survive as user intent
 	// once the draft is cleared. `mode_change` covers the `plan.defaultOnStartup`
@@ -814,12 +810,17 @@ export class SessionManager {
 		return body;
 	}
 
-	#historyContainsAssistantMessage(): boolean {
-		return this.#entries.some(isAssistantEntry);
+	/**
+	 * Any conversation message (the first is normally the user prompt) makes the
+	 * session worth persisting: a crash or exit mid-first-turn must not lose the
+	 * typed prompt. Sessions that never receive a prompt still stay lazy.
+	 */
+	#historyContainsMessage(): boolean {
+		return this.#entries.some(entry => entry.type === "message");
 	}
 
 	#shouldHaveSessionFile(): boolean {
-		return this.#forceFileCreation || this.#fileIsCurrent || this.#historyContainsAssistantMessage();
+		return this.#forceFileCreation || this.#fileIsCurrent || this.#historyContainsMessage();
 	}
 
 	/**
@@ -959,9 +960,9 @@ export class SessionManager {
 			this.#rewriteRequired = true;
 		}
 
-		// Lazy gate: a brand-new session is not written until it has an assistant
-		// message (or someone forced creation), so sessions that never produce
-		// output never create a file.
+		// Lazy gate: a brand-new session is not written until it has a
+		// conversation message (or someone forced creation), so sessions that
+		// never receive a prompt never create a file.
 		if (!this.#shouldHaveSessionFile()) {
 			this.#fileIsCurrent = false;
 			return;
@@ -1582,9 +1583,9 @@ export class SessionManager {
 			}
 
 			// Rewrite at the new location when the file already existed (update cwd) or
-			// there is in-memory output worth materializing; otherwise stay lazy.
-			const hasAssistant = this.#historyContainsAssistantMessage();
-			if (this.#persist && this.#sessionFile && (sessionFileExisted || hasAssistant)) {
+			// there is in-memory conversation worth materializing; otherwise stay lazy.
+			const hasConversation = this.#historyContainsMessage();
+			if (this.#persist && this.#sessionFile && (sessionFileExisted || hasConversation)) {
 				this.#forceFileCreation = true;
 				await this.#rewriteAtomically();
 			}
@@ -1958,7 +1959,7 @@ export class SessionManager {
 	 * storage (the JSONL exists on disk / in the active storage backend).
 	 *
 	 * Session persistence is lazy: the file is only written once the history
-	 * contains an assistant message (or an explicit {@link ensureOnDisk}
+	 * contains a conversation message (or an explicit {@link ensureOnDisk}
 	 * caller forces it). Until then {@link getSessionFile} returns an allocated
 	 * path that leads nowhere, so a `--resume <id>` hint built from it would
 	 * always fail. Consumers that advertise a resume command must gate on this
@@ -2835,8 +2836,8 @@ export class SessionManager {
 
 		if (breadcrumb) {
 			// A fresh `/new` boundary whose JSONL was never materialized (lazy
-			// new-session persistence, then a process exit before any assistant
-			// output). Honor the boundary: start fresh rather than falling back to
+			// new-session persistence, then a process exit before any conversation
+			// message). Honor the boundary: start fresh rather than falling back to
 			// findMostRecentSession(), which would resurrect the pre-`/new`
 			// transcript. A materialized (or genuinely stale/deleted) crumb reports
 			// exists=false only when fresh, so this never masks a real stale crumb.
