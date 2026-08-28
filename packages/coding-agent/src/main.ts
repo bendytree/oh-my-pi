@@ -11,7 +11,7 @@ import { EventLoopKeepalive, type ThinkingLevel } from "@oh-my-pi/pi-agent-core"
 import type { ImageContent, Model } from "@oh-my-pi/pi-ai";
 import {
 	$env,
-	directoryExists,
+	directoryIsMissing,
 	getLogPath,
 	getProjectDir,
 	isBunTestRuntime,
@@ -36,6 +36,7 @@ import { ModelRegistry } from "./config/model-registry";
 import {
 	DEFAULT_PREWALK_TARGET,
 	expandRoleAlias,
+	formatModelSelectorValue,
 	getModelMatchPreferences,
 	resolveCliModel,
 	resolveModelRoleValue,
@@ -113,7 +114,7 @@ type RunPrintMode = (session: AgentSession, options: PrintModeOptions) => Promis
 type RunRpcMode = (
 	session: AgentSession,
 	setToolUIContext?: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
-	eventBus?: EventBus,
+	subagentEventBus?: EventBus,
 	input?: ReadableStream<Uint8Array>,
 ) => Promise<never>;
 
@@ -126,7 +127,8 @@ async function checkForNewVersion(currentVersion: string): Promise<string | unde
 		return;
 	}
 	try {
-		const release = await getLatestRelease({ timeoutMs: 5_000 });
+		const channel = settings.get("update.channel");
+		const release = await getLatestRelease({ timeoutMs: 5_000, channel });
 		return Bun.semver.order(release.version, currentVersion) > 0 ? release.version : undefined;
 	} catch {
 		return undefined;
@@ -490,6 +492,7 @@ async function runInteractiveMode(
 	forceSetupWizard: boolean,
 	showStartupSplash: boolean,
 	eventBus?: EventBus,
+	subagentEventBus?: EventBus,
 	initialMessage?: string,
 	initialImages?: ImageContent[],
 	joinLink?: string,
@@ -509,6 +512,7 @@ async function runInteractiveMode(
 			mcpManager,
 			eventBus,
 			startupLease?.composer,
+			subagentEventBus,
 		);
 		startupLease?.adopt();
 	} catch (error) {
@@ -564,13 +568,12 @@ async function runInteractiveMode(
 	// Consume failures immediately, but defer any banner until the transcript is stable.
 	const checkedVersionPromise = versionCheckPromise.catch(() => undefined);
 
-	// Cold-launch cleanup: the first paint already clears native history, and this
-	// replay replaces the welcome/startup frame with the resumed/new transcript.
-	// Every in-process session load also uses `clearTerminalHistory`; cold launch
-	// follows the same clean-cutover path instead of preserving a previous run's
-	// transcript above the fresh one.
+	// `init` already cleared native history before painting the startup frame.
+	// Replaying resumed transcript rows and repainting the viewport is enough;
+	// another clear would only archive the startup frame. In-process session
+	// replacements still request `clearTerminalHistory` at their own callsites.
 	await logger.time("InteractiveMode.renderInitialMessages", () =>
-		mode.renderInitialMessages({ preserveExistingChat: true, clearTerminalHistory: true }),
+		mode.renderInitialMessages({ preserveExistingChat: true }),
 	);
 	// A resolved version check must not insert its banner into a partial transcript.
 	checkedVersionPromise.then(newVersion => {
@@ -756,31 +759,74 @@ async function moveMissingCwdSessionIfNeeded(
 	return { status: "moved", manager };
 }
 
+type ResumedProjectResult = { cwd: string; chdirFailed?: string };
+
 async function switchToResumedProject(
 	resumedCwd: string | undefined,
 	activeSettings: Settings,
 	pluginPreloadPromise: Promise<unknown>,
-): Promise<string> {
+	sessionManager: SessionManager,
+): Promise<ResumedProjectResult> {
+	const launchCwd = getProjectDir();
 	if (
 		!resumedCwd ||
-		normalizePathForComparison(resumedCwd) === normalizePathForComparison(getProjectDir()) ||
-		!(await directoryExists(resumedCwd))
+		normalizePathForComparison(resumedCwd) === normalizePathForComparison(launchCwd) ||
+		(await directoryIsMissing(resumedCwd))
 	) {
-		return getProjectDir();
+		return { cwd: launchCwd };
 	}
 
 	// Let the launch-cwd preload settle before clearing and re-warming its caches.
 	await pluginPreloadPromise.catch(() => {});
-	setProjectDir(resumedCwd);
+	try {
+		setProjectDir(resumedCwd);
+	} catch (error) {
+		logger.warn("Could not switch to resumed project directory", { cwd: resumedCwd, error: String(error) });
+		sessionManager.setCwdWithoutRelocation(launchCwd);
+		return { cwd: launchCwd, chdirFailed: resumedCwd };
+	}
 	clearPluginRootsAndCaches();
 	resetCapabilities();
 	const cwd = getProjectDir();
 	// clearPluginRootsAndCaches only kicks off an unawaited re-warm; await a fresh
 	// destination preload so sync consumers (plugin-provided LSP/DAP config) never
 	// read the launch project's stale/empty roots during session creation.
-	await preloadPluginRoots(os.homedir(), cwd);
-	await activeSettings.reloadForCwd(cwd);
-	return cwd;
+	try {
+		await preloadPluginRoots(os.homedir(), cwd);
+		await activeSettings.reloadForCwd(cwd);
+		if (normalizePathForComparison(sessionManager.getCwd()) !== normalizePathForComparison(cwd)) {
+			sessionManager.adoptRecordedCwd();
+		}
+	} catch (error) {
+		// The process cwd is already committed to the target. If rescoping the
+		// cwd-derived state fails, undo the whole transition instead of building
+		// the session with target-scoped cwd and launch-scoped settings.
+		logger.warn("Could not rescope to resumed project directory", { cwd, error: String(error) });
+		try {
+			setProjectDir(launchCwd);
+			sessionManager.setCwdWithoutRelocation(launchCwd);
+			clearPluginRootsAndCaches();
+			await preloadPluginRoots(os.homedir(), launchCwd);
+			// Settings.#cwd was already assigned the destination; re-scope it
+			// back so path-derived values and project saves target the launch
+			// project, not the failed resume target.
+			await activeSettings.reloadForCwd(launchCwd);
+		} catch (rollbackError) {
+			throw new SessionResolutionError(
+				`Could not switch to resumed project ${resumedCwd} (${error instanceof Error ? error.message : String(error)}); failed to restore launch directory ${launchCwd}: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+			);
+		}
+		return { cwd: launchCwd, chdirFailed: resumedCwd };
+	}
+	return { cwd };
+}
+
+function notifyResumeCwdFallback(parsedArgs: Args, resumedProject: ResumedProjectResult, cwd: string): void {
+	if (!resumedProject.chdirFailed) return;
+	writeStartupNotice(
+		parsedArgs,
+		`${chalk.yellow(`Could not switch to resumed project ${resumedProject.chdirFailed}; staying in ${cwd}.`)}\n`,
+	);
 }
 
 /**
@@ -1155,8 +1201,13 @@ export async function buildSessionOptions(
 			}
 		} else if (resolved.model) {
 			options.model = resolved.model;
+			// The recorded role must carry the effort the session actually starts
+			// at, or the first cycle back into `default` overrides it.
 			activeSettings.overrideModelRoles({
-				default: resolved.selector ?? `${resolved.model.provider}/${resolved.model.id}`,
+				default: formatModelSelectorValue(
+					resolved.selector ?? `${resolved.model.provider}/${resolved.model.id}`,
+					parsed.thinking ?? resolved.thinkingLevel,
+				),
 			});
 			if (!parsed.thinking && resolved.thinkingLevel) {
 				options.thinkingLevel = resolved.thinkingLevel;
@@ -1381,7 +1432,13 @@ export async function runRootCommand(
 		await logger.time("initTheme:initial", ensureTheme);
 
 		const parsedArgs = parsed;
-		await logger.time("applyStartupCwd", applyStartupCwd, parsedArgs);
+		try {
+			await logger.time("applyStartupCwd", applyStartupCwd, parsedArgs);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			process.stderr.write(`${chalk.red(`Error: ${message}`)}\n`);
+			process.exit(1);
+		}
 
 		const notifs: (InteractiveModeNotify | null)[] = [];
 
@@ -1675,7 +1732,15 @@ export async function runRootCommand(
 
 		if ((typeof parsedArgs.resume === "string" || foreignSource) && sessionManager) {
 			const previousCwd = cwd;
-			cwd = await switchToResumedProject(sessionManager.getCwd(), settingsInstance, pluginPreloadPromise);
+			const recordedCwd = sessionManager.getRecordedCwd() ?? sessionManager.getCwd();
+			const resumedProject = await switchToResumedProject(
+				recordedCwd,
+				settingsInstance,
+				pluginPreloadPromise,
+				sessionManager,
+			);
+			cwd = resumedProject.cwd;
+			notifyResumeCwdFallback(parsedArgs, resumedProject, cwd);
 			if (cwd !== previousCwd) {
 				// applyStartupCwd persists an explicit --cwd in parsedArgs; once resume
 				// switches projects, keep session construction on the destination too.
@@ -1734,14 +1799,21 @@ export async function runRootCommand(
 				stopStartupWatchdog();
 				process.exit(0);
 			}
-			// Re-scope every cwd-derived input before building the resumed session.
+			sessionManager = await SessionManager.open(selected.path);
 			const previousCwd = cwd;
-			cwd = await switchToResumedProject(selected.cwd, settingsInstance, pluginPreloadPromise);
+			const recordedCwd = selected.cwd || sessionManager.getRecordedCwd() || sessionManager.getCwd();
+			const resumedProject = await switchToResumedProject(
+				recordedCwd,
+				settingsInstance,
+				pluginPreloadPromise,
+				sessionManager,
+			);
+			cwd = resumedProject.cwd;
+			notifyResumeCwdFallback(parsedArgs, resumedProject, cwd);
 			if (cwd !== previousCwd) {
 				parsedArgs.cwd = cwd;
 				scopedModels = await resolveScopedModels(parsedArgs, modelRegistry, settingsInstance);
 			}
-			sessionManager = await SessionManager.open(selected.path);
 		}
 
 		if (sessionManager && (parsedArgs.continue || parsedArgs.resume || parsedArgs.fork || foreignSource)) {
@@ -1758,7 +1830,6 @@ export async function runRootCommand(
 				}
 			}
 		}
-
 		await pluginPreloadPromise;
 		if (deps === DEFAULT_RUN_ROOT_DEPENDENCIES) {
 			await logger.time("registerDaemonProjectPresence", registerDaemonProjectPresence, cwd);
@@ -1844,6 +1915,7 @@ export async function runRootCommand(
 			}
 
 			const eventBus = new EventBus();
+			const subagentEventBus = new EventBus();
 			const extensionsResult = parsedArgs.trustedExtensions?.length
 				? await loadTrustedSessionExtensions(sessionOptions, cwd, eventBus)
 				: await loadSessionExtensions(sessionOptions, cwd, settingsInstance, eventBus);
@@ -1923,6 +1995,7 @@ export async function runRootCommand(
 			} = await createSession({
 				...sessionOptions,
 				eventBus,
+				subagentEventBus,
 				preloadedExtensions: extensionsResult,
 			});
 
@@ -1948,6 +2021,7 @@ export async function runRootCommand(
 					settings: settingsInstance,
 					enableLsp: sessionOptions.enableLsp ?? true,
 					eventBus,
+					subagentEventBus,
 				}),
 				Math.trunc(Number(settingsInstance.get("task.agentIdleTtlMs") ?? 420_000) || 0),
 			);
@@ -1996,7 +2070,7 @@ export async function runRootCommand(
 				// Branch-only protocol runner: keep RPC host code out of normal interactive startup.
 				const runRpcMode: RunRpcMode = (await import("./modes/rpc/rpc-mode")).runRpcMode;
 				stopStartupWatchdog();
-				await runRpcMode(session, mode === "rpc-ui" ? setToolUIContext : undefined, eventBus, rpcInput);
+				await runRpcMode(session, mode === "rpc-ui" ? setToolUIContext : undefined, subagentEventBus, rpcInput);
 			} else if (isInteractive) {
 				const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 				const startupChangelog = await startupChangelogPromise;
@@ -2036,6 +2110,7 @@ export async function runRootCommand(
 						deps.forceSetupWizard === true,
 						showStartupSplash,
 						eventBus,
+						subagentEventBus,
 						initialMessage,
 						initialImages,
 						parsedArgs.join,

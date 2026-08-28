@@ -311,10 +311,7 @@ Location: `packages/*/CHANGELOG.md` (per package).
 
 ## Releasing
 
-1. Ensure all changes since last release are in each affected package's `[Unreleased]` section.
-2. Run `bun run release`.
-
-The script handles version bump, CHANGELOG finalization, commit, tag, publish, and adding new `[Unreleased]` sections.
+**NEVER run `bun run release` in this fork.** That is upstream's release script: it bumps every package.json/Cargo.toml version line — the same lines upstream bumps for its own releases — which guarantees merge conflicts on the next upstream sync (this burned us at v18.0.2 vs upstream v18.0.9). The `[Unreleased]` changelog convention above still applies to every change.
 
 ## Fork Deployment
 
@@ -323,7 +320,9 @@ This is the `bendytree/oh-my-pi` fork. Two mechanisms replace installed omp bina
 1. **The `agents` CLI auto-reinstalls on every launch.** `agents` (`~/.local/bin/agents`, separate compiled tool) runs `omp --version` before launching an agent; any version string without `-fork.` is treated as "not the fork" and silently replaced by curling `releases/latest/download/omp-<platform>` over `~/.local/bin/omp`. Locally built binaries report plain `x.y.z` (the `-fork.N` suffix is stamped by the release pipeline), so **a hand-installed local build is reverted by the very next `agents` launch on that machine** — Mac and homelab VMs alike.
 2. **`omp update` is manual but fork-pointed.** It (and the startup notice, `startup.checkUpdate`) resolves the latest fork release and replaces the binary in place. No silent auto-install here.
 
-Consequence: unreleased fork changes exist only in this tree. To deploy anything for real, commit and cut a fork release (`bun run release` → new fork tag); hand-copied binaries are a stopgap that dies at the next `agents` launch.
+Consequence: unreleased fork changes exist only in this tree; hand-copied binaries are a stopgap that dies at the next `agents` launch.
+
+**To deploy: commit and push to `main`. Nothing else.** The `Fork sync & release` workflow (`.github/workflows/fork-release.yml`) triggers on push: it merges the latest upstream stable tag, computes the version itself (upstream base + `-fork.N`, stamped at build time by `scripts/fork-set-version.ts`), builds darwin-arm64/linux-x64 binaries, and publishes the GitHub release. No local version bump or tag is ever needed — a stray local tag ahead of upstream's base corrupts the workflow's base-version calculation. If the workflow fails on the upstream merge, resolve locally (`git fetch upstream && git merge v<latest>`), push, and re-run it.
 
 - Build binaries locally: `bun scripts/ci-release-build-binaries.ts --targets darwin-arm64,linux-x64` → `packages/coding-agent/binaries/`. Cross-target builds need the prebuilt native addon in `packages/natives/native/` — fetch with `npm pack @oh-my-pi/pi-natives-<platform>@<version>` or copy from `~/.omp/natives/<version>/`.
 - Never overwrite a live macOS binary with in-place `cp` — macOS SIGKILLs processes whose signed image changed. Copy to a temp name and `mv` over (fresh inode), like `update-cli.ts` does.
