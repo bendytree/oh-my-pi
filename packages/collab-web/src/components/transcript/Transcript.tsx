@@ -220,6 +220,12 @@ const EntryRow = memo(function EntryRow({ entry, results, active, host }: EntryR
 					<span>branch summary</span>
 				</div>
 			);
+		case "reset_boundary":
+			return (
+				<div className="tr-divider">
+					<span>context cleared</span>
+				</div>
+			);
 		case "model_change":
 			return (
 				<Row kind="marker" gutter="" title={entry.timestamp}>

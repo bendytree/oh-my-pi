@@ -9,6 +9,7 @@ import { HeaderBar } from "./components/shell/HeaderBar";
 import { Toasts } from "./components/shell/Toasts";
 import { Transcript } from "./components/transcript/Transcript";
 import { GuestClient } from "./lib/client";
+import { findResetBoundary, transcriptCutIndex } from "./lib/transcript-cut";
 import { useGuestSnapshot } from "./lib/use-guest";
 import type { ToolRenderHost } from "./tool-render";
 import "./components/shell/shell.css";
@@ -125,6 +126,8 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	// Client-side transcript trim: entries before this id are hidden (not removed).
 	const [clearCutoffId, setClearCutoffId] = useState<string | null>(null);
+	// Host `/clear` boundary the user explicitly revealed via "show all".
+	const [revealedBoundaryId, setRevealedBoundaryId] = useState<string | null>(null);
 	const autoOpenedRef = useRef(false);
 
 	const subCount = useMemo(() => snap.agents.filter(a => a.kind === "sub").length, [snap.agents]);
@@ -162,12 +165,14 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 		}
 		setClearCutoffId(entries[cut]?.id ?? null);
 	}, [snap.entries]);
+	// Auto-collapse at the host's latest `/clear`: entries before the last
+	// reset_boundary are hidden until explicitly revealed.
+	const boundary = useMemo(() => findResetBoundary(snap.entries), [snap.entries]);
 
-	const cutIndex = useMemo(() => {
-		if (clearCutoffId === null) return 0;
-		const i = snap.entries.findIndex(entry => entry.id === clearCutoffId);
-		return i > 0 ? i : 0;
-	}, [snap.entries, clearCutoffId]);
+	const cutIndex = useMemo(
+		() => transcriptCutIndex(snap.entries, boundary, revealedBoundaryId, clearCutoffId),
+		[snap.entries, boundary, revealedBoundaryId, clearCutoffId],
+	);
 	const visibleEntries = cutIndex > 0 ? snap.entries.slice(cutIndex) : snap.entries;
 
 	const title = snap.header?.title ?? snap.state?.sessionName ?? "session";
@@ -196,7 +201,14 @@ function Session({ client, onLeave, onRejoin }: SessionProps): ReactNode {
 								<span>
 									{cutIndex} earlier {cutIndex === 1 ? "message" : "messages"} hidden
 								</span>
-								<button type="button" className="sh-btn" onClick={() => setClearCutoffId(null)}>
+								<button
+									type="button"
+									className="sh-btn"
+									onClick={() => {
+										setClearCutoffId(null);
+										setRevealedBoundaryId(boundary?.id ?? null);
+									}}
+								>
 									show all
 								</button>
 							</div>

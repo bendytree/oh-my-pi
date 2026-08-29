@@ -2247,9 +2247,26 @@ export class SessionManager {
 	 * Snapshot the session for collab replication: the live header plus a deep
 	 * copy of every entry (the host mutates entries in place on rewrite paths, so
 	 * guests must not share references).
+	 *
+	 * Entries are sliced at the last `/clear` boundary on the live path: guests
+	 * join to collaborate on the current conversation, and pre-clear history
+	 * (kept on disk for exports) can be many MB that takes minutes through the
+	 * relay. The boundary entry itself is kept so guests see the clear; its
+	 * dangling parentId is harmless — index/path walks stop at missing parents,
+	 * same as the welcome path's isWireSessionEntry filtering.
 	 */
 	snapshotForReplication(): { header: SessionHeader; entries: SessionEntry[] } {
-		return { header: structuredClone(this.#header), entries: structuredClone(this.#entries) as SessionEntry[] };
+		let start = 0;
+		const livePath = this.#index.pathTo();
+		for (let i = livePath.length - 1; i >= 0; i--) {
+			const onPath = livePath[i];
+			if (onPath?.type !== "reset_boundary") continue;
+			start = this.#entries.findIndex(entry => entry.id === onPath.id);
+			if (start < 0) start = 0;
+			break;
+		}
+		const entries = start > 0 ? this.#entries.slice(start) : this.#entries;
+		return { header: structuredClone(this.#header), entries: structuredClone(entries) as SessionEntry[] };
 	}
 
 	/**

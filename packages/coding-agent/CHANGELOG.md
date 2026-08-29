@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Collab guests joining a session that was `/clear`ed no longer download the entire pre-clear history; the host now replicates only the transcript since the last clear, and a live `/clear` is broadcast to guests.
+
 ### Removed
 
 - `/collab` no longer prints a QR code with the join link.

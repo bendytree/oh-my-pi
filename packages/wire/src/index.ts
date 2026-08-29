@@ -158,13 +158,18 @@ export interface ThinkingLevelChangeEntry extends EntryBase {
 	thinkingLevel?: string | null;
 }
 
+export interface ResetBoundaryEntry extends EntryBase {
+	type: "reset_boundary";
+}
+
 export type SessionEntry =
 	| MessageEntry
 	| CustomMessageEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| ModelChangeEntry
-	| ThinkingLevelChangeEntry;
+	| ThinkingLevelChangeEntry
+	| ResetBoundaryEntry;
 
 /** customType of collab guest prompts injected on the host. */
 export const COLLAB_PROMPT_MESSAGE_TYPE = "collab-prompt";

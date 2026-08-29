@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The transcript now collapses at the host's latest `/clear` instead of rendering the entire pre-clear history; a "show all" strip reveals it, and a live clear shows a "context cleared" divider.
+
 ## [18.0.2] - 2026-08-28
 
 ### Added
