@@ -839,7 +839,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"statusLine.compactThinkingLevel": {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: {
 			tab: "appearance",
 			group: "Status Line",
@@ -1991,13 +1991,13 @@ export const SETTINGS_SCHEMA = {
 	// Input and startup
 	doubleEscapeAction: {
 		type: "enum",
-		values: ["branch", "tree", "none"] as const,
-		default: "tree",
+		values: ["rewind", "none"] as const,
+		default: "rewind",
 		ui: {
 			tab: "interaction",
 			group: "Input",
 			label: "Double-Escape Action",
-			description: "Action when pressing Escape twice with empty editor",
+			description: "Pressing Escape twice with an empty editor opens the transcript rewind selector",
 		},
 	},
 
@@ -2572,10 +2572,10 @@ export const SETTINGS_SCHEMA = {
 			description: "Fixed token limit for context maintenance; overrides percentage if set",
 			options: [
 				{ value: "default", label: "Default", description: "Use percentage-based threshold" },
-				{ value: "25000", label: "25K tokens", description: "Quarter of a 200K window" },
-				{ value: "50000", label: "50K tokens", description: "Half of a 200K window" },
-				{ value: "100000", label: "100K tokens", description: "Half of a 200K window" },
-				{ value: "150000", label: "150K tokens", description: "Three-quarters of a 200K window" },
+				{ value: "25000", label: "25K tokens", description: "1/8 of a 200K window" },
+				{ value: "50000", label: "50K tokens", description: "1/4 of a 200K window" },
+				{ value: "100000", label: "100K tokens", description: "1/2 of a 200K window" },
+				{ value: "150000", label: "150K tokens", description: "3/4 of a 200K window" },
 				{ value: "200000", label: "200K tokens", description: "Full standard context window" },
 				{ value: "300000", label: "300K tokens", description: "Large context window" },
 				{ value: "500000", label: "500K tokens", description: "Very large context window" },
@@ -3579,6 +3579,17 @@ export const SETTINGS_SCHEMA = {
 			group: "Editing",
 			label: "Abort on Failed Preview",
 			description: "Abort streaming edit tool calls when patch preview fails",
+		},
+	},
+
+	"edit.recoverInlineEdits": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "files",
+			group: "Editing",
+			label: "Recover Inline Edit Payloads",
+			description: "Execute edit payloads the model emits as plain text by converting them into edit tool calls",
 		},
 	},
 
@@ -4957,7 +4968,11 @@ export const SETTINGS_SCHEMA = {
 			label: "Prefer Task Delegation",
 			description: "How strongly to push delegating work to subagents",
 			options: [
-				{ value: "default", label: "Default", description: "Model decides when to delegate" },
+				{
+					value: "default",
+					label: "Default",
+					description: "Uses the selected model's policy; some models require an explicit delegation request",
+				},
 				{ value: "preferred", label: "Preferred", description: "Adds delegation guidance to the system prompt" },
 				{ value: "always", label: "Always", description: "Prompt guidance plus a first-turn delegation reminder" },
 			],
