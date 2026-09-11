@@ -625,6 +625,25 @@ describe("IRC", () => {
 
 			await expect(waiting).rejects.toThrow('agent "0-Sub" is not running');
 		});
+
+		it("wait receives a final relay after the sender becomes idle", async () => {
+			const main = makeFakeSession();
+			registry.register({ id: "0-Main", displayName: "main", kind: "main", session: main.session, status: "idle" });
+			const sub = makeFakeSession();
+			registry.register({ id: "0-Sub", displayName: "task", kind: "sub", session: sub.session, status: "running" });
+			const replies = Promise.withResolvers<void>();
+			sub.session.waitForIrcReplies = () => replies.promise;
+
+			const waiting = bus.wait("0-Main", { from: "0-Sub" }, 1000, undefined, {
+				liveness: { registry, senderId: "0-Main" },
+			});
+			registry.setStatus("0-Sub", "idle");
+			const receipt = await bus.send({ from: "0-Sub", to: "0-Main", body: "final reply" });
+			replies.resolve();
+
+			expect(receipt.outcome).toBe("injected");
+			expect((await waiting)?.body).toBe("final reply");
+		});
 	});
 
 	describe("HubTool", () => {

@@ -335,10 +335,20 @@ export class IrcBus {
 			const hasRunningSender = (from?: string): boolean =>
 				registry.listVisibleTo(senderId).some(ref => registry.isRunning(ref) && (!from || ref.id === from));
 			const check = filter.from ? () => hasRunningSender(filter.from) : () => hasRunningSender();
-			unsubscribeLiveness = registry.onChange(() => {
-				if (!check()) {
+			unsubscribeLiveness = registry.onChange(event => {
+				if (check()) return;
+				// A revived subagent can finish its turn before its wake-turn relay
+				// reaches the bus. Its reply obligation is registered before the turn
+				// starts, so let that drain resolve the waiter before declaring the
+				// now-idle sender dead.
+				const stoppedSession = filter.from ? registry.get(filter.from)?.session : event.ref.session;
+				if (!stoppedSession) {
 					settle({ kind: "abort", error: new Error(livenessReason) });
+					return;
 				}
+				void stoppedSession.waitForIrcReplies().then(() => {
+					if (!check()) settle({ kind: "abort", error: new Error(livenessReason) });
+				});
 			});
 			if (!check()) {
 				settle({ kind: "abort", error: new Error(livenessReason) });
