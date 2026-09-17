@@ -467,6 +467,25 @@ async function handleRemoveCommand(rest: string, runtime: SlashCommandRuntime): 
 	}
 }
 
+async function handleReauthCommand(rest: string, runtime: SlashCommandRuntime): Promise<SlashCommandResult> {
+	const name = rest.split(/\s+/)[0]?.trim() ?? "";
+	if (!name) return usage("Usage: /mcp reauth <name>", runtime);
+	if (!runtime.reauthorizeMcp) {
+		return usage("/mcp reauth requires an OAuth-capable UI client.", runtime);
+	}
+	const run = async (): Promise<void> => {
+		try {
+			await runtime.reauthorizeMcp!(name);
+			await runtime.output(`Reauthorized MCP server "${name}" and reloaded its tools.`);
+		} catch (error) {
+			await runtime.output(`Failed to reauthorize MCP server "${name}": ${errorMessage(error)}`);
+		}
+	};
+	if (runtime.runCommandInBackground) runtime.runCommandInBackground(run);
+	else await run();
+	return commandConsumed();
+}
+
 const MCP_HELP_TEXT = [
 	"MCP server management (ACP mode)",
 	"  /mcp list                                               List configured servers",
@@ -477,13 +496,19 @@ const MCP_HELP_TEXT = [
 	"  /mcp resources                                          List resources from all servers",
 	"  /mcp prompts                                            List prompts from all servers",
 	"  /mcp test <name>                                        Test connection to a server",
+	"  /mcp reauth <name>                                      Reauthorize OAuth through the host UI",
 	"  /mcp add <name> [--scope project|user] [--url <url>]    Add a server (non-interactive)",
 	"  /mcp add <name> [-- <command...>]                       Add a stdio server",
 	"  /mcp smithery-search <kw> [--scope project|user]        Search Smithery registry",
 	"  /mcp help                                               Show this help",
 ].join("\n");
 
-const TUI_ONLY_MCP_VERBS = new Set(["reauth", "unauth", "smithery-login", "smithery-logout", "reconnect"]);
+const TUI_ONLY_MCP_VERBS: Record<string, true> = {
+	unauth: true,
+	"smithery-login": true,
+	"smithery-logout": true,
+	reconnect: true,
+};
 
 /** ACP/text-mode `/mcp` handler. Shared by both dispatchers via the spec. */
 export async function handleMcpAcp(
@@ -501,7 +526,7 @@ export async function handleMcpAcp(
 			runtime,
 		);
 	}
-	if (TUI_ONLY_MCP_VERBS.has(verb)) {
+	if (TUI_ONLY_MCP_VERBS[verb]) {
 		return usage(`/mcp ${verb} requires OAuth or browser flows only available in the TUI client.`, runtime);
 	}
 	switch (verb) {
@@ -511,6 +536,8 @@ export async function handleMcpAcp(
 			return await handlePromptsCommand(runtime);
 		case "test":
 			return await handleTestCommand(rest, runtime);
+		case "reauth":
+			return await handleReauthCommand(rest, runtime);
 		case "add":
 			return await handleAddCommand(rest, runtime);
 		case "smithery-search":

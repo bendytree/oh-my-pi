@@ -116,6 +116,7 @@ type RunRpcMode = (
 	setToolUIContext?: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
 	subagentEventBus?: EventBus,
 	input?: ReadableStream<Uint8Array>,
+	mcpManager?: MCPManager,
 ) => Promise<never>;
 
 export function writeStartupNotice(parsedArgs: Pick<Args, "mode">, text: string): void {
@@ -2094,7 +2095,13 @@ export async function runRootCommand(
 				// Branch-only protocol runner: keep RPC host code out of normal interactive startup.
 				const runRpcMode: RunRpcMode = (await import("./modes/rpc/rpc-mode")).runRpcMode;
 				stopStartupWatchdog();
-				await runRpcMode(session, mode === "rpc-ui" ? setToolUIContext : undefined, subagentEventBus, rpcInput);
+				await runRpcMode(
+					session,
+					mode === "rpc-ui" ? setToolUIContext : undefined,
+					subagentEventBus,
+					rpcInput,
+					mcpManager,
+				);
 			} else if (isInteractive) {
 				const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 				const startupChangelog = await startupChangelogPromise;

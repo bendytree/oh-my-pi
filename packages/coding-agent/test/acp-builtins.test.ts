@@ -237,6 +237,8 @@ function createRuntime() {
 			},
 			refreshCommands: () => {},
 			reloadPlugins: async () => {},
+			runCommandInBackground: undefined as ((task: () => Promise<void>) => void) | undefined,
+			reauthorizeMcp: undefined as ((name: string) => Promise<void>) | undefined,
 			notifyTitleChanged: undefined as (() => Promise<void> | void) | undefined,
 			notifyConfigChanged: undefined as (() => Promise<void> | void) | undefined,
 		},
@@ -1178,6 +1180,28 @@ describe("wave 4 commands", () => {
 		expect(result).toEqual({ consumed: true });
 		expect(refreshCalled).toBe(true);
 		expect(output[0]).toContain("reload");
+	});
+
+	it("/mcp reauth delegates OAuth to the RPC host without blocking the prompt response", async () => {
+		const { promise, resolve } = Promise.withResolvers<void>();
+		const jobs: Promise<void>[] = [];
+		const names: string[] = [];
+		const { output, runtime } = createRuntime();
+		runtime.reauthorizeMcp = async name => {
+			names.push(name);
+			await promise;
+		};
+		runtime.runCommandInBackground = task => {
+			jobs.push(task());
+		};
+
+		const result = await executeAcpBuiltinSlashCommand("/mcp reauth vanta", runtime);
+		expect(result).toEqual({ consumed: true });
+		expect(names).toEqual(["vanta"]);
+		expect(output).toEqual([]);
+		resolve();
+		await Promise.all(jobs);
+		expect(output).toEqual(['Reauthorized MCP server "vanta" and reloaded its tools.']);
 	});
 
 	it("/mcp resources: outputs server list or no-server message", async () => {

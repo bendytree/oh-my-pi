@@ -30,6 +30,15 @@ import {
 	type Skill,
 } from "../../extensibility/skills";
 import { loadSlashCommands } from "../../extensibility/slash-commands";
+import type { MCPManager } from "../../mcp/manager";
+import {
+	authorizeMcp,
+	type MCPAuthorizationRequest,
+	MCPOAuthCancelledError,
+	reauthorizeMcpServer,
+	reloadMcpRuntime,
+} from "../../mcp/reauthorize";
+import type { MCPAuthChallenge, MCPServerConfig } from "../../mcp/types";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, USER_INTERRUPT_LABEL } from "../../session/messages";
@@ -774,6 +783,7 @@ export async function runRpcMode(
 	setToolUIContext?: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
 	subagentEventBus?: EventBus,
 	input: ReadableStream<Uint8Array> = claimRpcInput(),
+	mcpManager?: MCPManager,
 ): Promise<never> {
 	// Signal to RPC clients that the server is ready to accept commands
 	// Suppress terminal notifications: they write \x07 (BEL) or OSC sequences directly to
@@ -885,6 +895,25 @@ export async function runRpcMode(
 				undefined,
 				{ method: "input", title, placeholder, timeout: dialogOptions?.timeout },
 				response => parseValueDialogResponse(response, dialogOptions),
+			);
+		}
+
+		openUrl(
+			info: { url: string; launchUrl?: string; instructions?: string },
+			signal?: AbortSignal,
+		): Promise<boolean> {
+			return requestRpcDialog(
+				this.pendingRequests,
+				this.output,
+				{ signal },
+				false,
+				{
+					method: "open_url",
+					url: info.url,
+					launchUrl: info.launchUrl,
+					instructions: info.instructions,
+				},
+				response => !("cancelled" in response && response.cancelled),
 			);
 		}
 
@@ -1029,6 +1058,77 @@ export async function runRpcMode(
 	const rpcUiContext = new RpcExtensionUIContext(pendingExtensionRequests, output);
 	setToolUIContext?.(rpcUiContext, true);
 
+	const authorizeMcpThroughRpc = async (request: MCPAuthorizationRequest) => {
+		const presentationAbort = new AbortController();
+		try {
+			return await authorizeMcp(request, session.modelRegistry.authStorage, {
+				onAuth: info => {
+					void rpcUiContext
+						.openUrl(
+							{
+								...info,
+								instructions:
+									info.instructions ??
+									"Authorize in the opened page. If its redirect cannot reach the agent machine, copy the final browser URL and paste it into the next dialog.",
+							},
+							presentationAbort.signal,
+						)
+						.then(
+							accepted => {
+								if (!accepted && !presentationAbort.signal.aborted) {
+									presentationAbort.abort("MCP OAuth authorization cancelled");
+								}
+							},
+							reason => {
+								if (!presentationAbort.signal.aborted) presentationAbort.abort(reason);
+							},
+						);
+				},
+				onManualCodeInput: async signal => {
+					const value = await rpcUiContext.input(
+						"MCP OAuth callback",
+						"Paste the final redirect URL or authorization code",
+						{ signal },
+					);
+					if (value === undefined) {
+						if (!presentationAbort.signal.aborted) {
+							presentationAbort.abort("MCP OAuth authorization cancelled");
+						}
+						throw new MCPOAuthCancelledError();
+					}
+					return value;
+				},
+				signal: presentationAbort.signal,
+			});
+		} finally {
+			if (!presentationAbort.signal.aborted) presentationAbort.abort("MCP OAuth authorization settled");
+		}
+	};
+
+	const reauthorizeMcpThroughRpc = async (
+		name: string,
+		authChallenge?: MCPAuthChallenge,
+		reload = true,
+	): Promise<MCPServerConfig | undefined> => {
+		if (!mcpManager) throw new Error("MCP manager is unavailable in RPC mode.");
+		const result = await reauthorizeMcpServer({
+			cwd: session.sessionManager.getCwd(),
+			name,
+			authStorage: session.modelRegistry.authStorage,
+			manager: mcpManager,
+			authChallenge,
+			authorize: authorizeMcpThroughRpc,
+		});
+		if (reload) {
+			const loaded = await reloadMcpRuntime(session, mcpManager);
+			const connectionError = loaded.errors.get(name);
+			if (connectionError)
+				throw new Error(`OAuth succeeded, but the MCP server did not reconnect: ${connectionError}`);
+		}
+		return result.config;
+	};
+	mcpManager?.setAuthHandler((name, challenge) => reauthorizeMcpThroughRpc(name, challenge, false));
+
 	// Set up extensions with RPC-based UI context
 	await initializeExtensions(session, {
 		mode: "rpc",
@@ -1112,6 +1212,9 @@ export async function runRpcMode(
 					refreshCommands: emitAvailableCommandsUpdate,
 					reloadPlugins: reloadPluginState,
 					runCommandInBackground: task => shutdownCoordinator.track(task()),
+					reauthorizeMcp: async name => {
+						await reauthorizeMcpThroughRpc(name);
+					},
 					notifyTitleChanged: async () => {
 						output({ type: "session_info_update", title: session.sessionName, sessionId: session.sessionId });
 					},

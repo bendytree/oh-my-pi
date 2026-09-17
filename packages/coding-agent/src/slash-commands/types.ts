@@ -95,6 +95,8 @@ export interface SlashCommandRuntime {
 	 * return immediately and leave the serialized queue free for `abort`.
 	 */
 	runCommandInBackground?: (task: () => Promise<void>) => void;
+	/** Complete MCP OAuth through the host UI when this protocol client supports it. */
+	reauthorizeMcp?: (name: string) => Promise<void>;
 	notifyTitleChanged?: () => Promise<void> | void;
 	notifyConfigChanged?: () => Promise<void> | void;
 }
