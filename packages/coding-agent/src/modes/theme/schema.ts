@@ -2,7 +2,7 @@ import { type } from "@oh-my-pi/omptype";
 import type { SpinnerFramesOverride } from "./symbols";
 
 // ============================================================================
-// Types & Schema
+// Types
 // ============================================================================
 
 export type ColorValue = string | number;
