@@ -1875,7 +1875,11 @@ export class MCPCommandController {
 	 */
 	async reloadServers(): Promise<void> {
 		if (!this.ctx.mcpManager) return;
-		const result = await reloadMcpRuntime(this.ctx.session, this.ctx.mcpManager);
+		const result = await reloadMcpRuntime(
+			this.ctx.session,
+			this.ctx.mcpManager,
+			this.ctx.settings.get("mcp.enableProjectConfig") ?? true,
+		);
 		this.#showMCPConnectionErrors(result.errors);
 	}
 

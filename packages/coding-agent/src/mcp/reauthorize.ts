@@ -428,12 +428,16 @@ export async function reauthorizeMcpServer(options: ReauthorizeMcpOptions): Prom
 }
 
 /** Reconnect configured MCP servers and rebuild the session's live MCP tools. */
-export async function reloadMcpRuntime(session: AgentSession, manager: MCPManager): Promise<MCPLoadResult> {
+export async function reloadMcpRuntime(
+	session: AgentSession,
+	manager: MCPManager,
+	enableProjectConfig: boolean,
+): Promise<MCPLoadResult> {
 	await manager.disconnectAll();
 	session.setMCPPromptCommands([]);
 	clearFsCache();
 	const result = await manager.discoverAndConnect({
-		enableProjectConfig: session.settings.get("mcp.enableProjectConfig") ?? true,
+		enableProjectConfig,
 		filterExa: true,
 		filterBrowser: session.getEvalPreludes().some(definition => definition.name === "browser"),
 		extensionRoots: session.effectiveExtensionRoots,

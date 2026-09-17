@@ -1159,7 +1159,11 @@ export async function runRpcMode(
 			authorize: authorizeMcpThroughRpc,
 		});
 		if (reload) {
-			const loaded = await reloadMcpRuntime(session, mcpManager);
+			const loaded = await reloadMcpRuntime(
+				session,
+				mcpManager,
+				session.settings.get("mcp.enableProjectConfig") ?? true,
+			);
 			const connectionError = loaded.errors.get(name);
 			if (connectionError)
 				throw new Error(`OAuth succeeded, but the MCP server did not reconnect: ${connectionError}`);
